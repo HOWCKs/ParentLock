@@ -66,6 +66,13 @@ a {
   text-decoration: none;
 }
 
+.icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+}
+
 h1,
 h2,
 h3,
@@ -1082,6 +1089,11 @@ h3 {
 .map-footer-right {
   color: var(--mint-dark);
   font-weight: 700;
+}
+
+.map-footer-left svg {
+  width: 14px;
+  height: 14px;
 }
 
 .map-footer-right svg {
@@ -2516,6 +2528,12 @@ h3 {
   padding: 0 0 13px;
 }
 
+.calculator-card .panel-header > .icon {
+  width: 18px;
+  height: 18px;
+  color: var(--mint-dark);
+}
+
 .calculator-card .panel-header p {
   margin-top: 4px;
 }
@@ -2967,6 +2985,13 @@ h3 {
 
   .dashboard {
     padding: 29px 19px 95px;
+  }
+
+  .toast-region {
+    right: 16px;
+    bottom: 88px;
+    left: 16px;
+    width: auto;
   }
 
   .mobile-bottom-nav {
