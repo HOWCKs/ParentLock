@@ -6,6 +6,7 @@ REPO="HOWCKs/ParentLock"
 BRANCH="arena/019fbfa8-parentlock"
 WORKFLOW="android-apk.yml"
 OUTPUT_DIR="${HOME}/storage/downloads/ParentLock"
+TARGET="${1:-}"
 
 command -v gh >/dev/null 2>&1 || {
   echo "GitHub CLI não encontrado. Instale com: pkg install gh" >&2
@@ -55,17 +56,34 @@ for ATTEMPT in 1 2 3; do
   sleep $((ATTEMPT * 5))
 done
 
-APK="$(find "$OUTPUT_DIR" -type f -name '*.apk' -print -quit)"
-if [ -z "$APK" ]; then
+mapfile -t APKS < <(find "$OUTPUT_DIR" -type f -name '*.apk' -print | sort)
+if [ "${#APKS[@]}" -eq 0 ]; then
   echo "A build terminou, mas nenhum APK foi encontrado em $OUTPUT_DIR." >&2
   exit 1
 fi
 
 echo
-echo "APK disponível em: $APK"
-ls -lh "$APK"
+echo "APKs disponíveis:"
+printf ' - %s\n' "${APKS[@]}"
 
-if command -v termux-open >/dev/null 2>&1; then
-  echo "Abrindo instalador Android..."
-  termux-open "$APK"
+if [ -n "$TARGET" ]; then
+  if [ "$TARGET" != "admin" ] && [ "$TARGET" != "companion" ]; then
+    echo "Uso: bash scripts/termux-apk.sh [admin|companion]" >&2
+    exit 1
+  fi
+  APK="$(find "$OUTPUT_DIR" -type f -iname "*${TARGET}*.apk" -print -quit)"
+  if [ -z "$APK" ]; then
+    echo "APK do perfil '$TARGET' não encontrado." >&2
+    exit 1
+  fi
+  echo "Abrindo instalador: $APK"
+  if command -v termux-open >/dev/null 2>&1; then
+    termux-open "$APK"
+  fi
+else
+  echo
+echo "Para instalar o app administrador:"
+  echo "  bash scripts/termux-apk.sh admin"
+  echo "Para instalar o app acompanhado:"
+  echo "  bash scripts/termux-apk.sh companion"
 fi

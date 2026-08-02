@@ -2,16 +2,21 @@
 
 Experiência mobile-first para proteção familiar clara, segura e com consentimento.
 
-## O que está nesta primeira entrega
+## Dois aplicativos
 
-A interface já apresenta os dois lados do produto em um único espaço de teste:
+A próxima compilação gera dois APKs com o mesmo núcleo visual, mas com experiências separadas:
 
-- **Administrador:** visão geral da família, localização/rota, alertas, conexão por código, check-in de áudio e central de privacidade.
-- **Acompanhado:** botão SOS, localização compartilhada, rota do dia, explicação sobre áudio com aceite e calculadora.
-- **Transparência:** o estado de compartilhamento é sempre visível; o fluxo de áudio é um pedido de check-in que depende de aceite explícito e não oferece escuta oculta ou contínua.
-- **Dados simulados:** esta versão é para validar a experiência visual e os fluxos. Nenhuma localização, áudio ou dado pessoal real é coletado.
+- **ParentLock Admin:** painel da família, mapa e rotas, alertas, conexão por código, check-in de áudio e privacidade.
+- **ParentLock Companion:** tela principal focada em calculadora e quiz matemático. Não exibe o painel, o histórico ou os alertas do administrador. A área **Proteção familiar** permanece identificada e visível para mostrar o vínculo, o consentimento, o status de localização e o SOS.
 
-A base usa **Vite + JavaScript modular + CSS responsivo** para que a interface possa ser testada imediatamente no navegador do celular via Termux. Para a versão conectada, a evolução recomendada é levar os mesmos fluxos para **Expo/React Native**, com permissões nativas explícitas, autenticação, backend e mapa real.
+A ferramenta não disfarça coleta de localização ou áudio como calculadora. Se a pessoa não quiser compartilhar dados, ela pode pausar ou desativar as permissões na área de privacidade; um aplicativo realmente independente de matemática também pode ser compilado sem nenhuma permissão sensível.
+
+Nesta versão:
+
+- o mapa, a localização, o SOS e o áudio usam dados simulados;
+- o áudio é somente um pedido de check-in com aceite explícito;
+- não existe escuta oculta ou contínua;
+- nenhuma localização, gravação ou dado pessoal real é coletado.
 
 ## Executar no Termux
 
@@ -28,18 +33,35 @@ Abra o endereço exibido pelo Vite no navegador. Para testar em outro aparelho n
 Comandos úteis:
 
 ```bash
-npm run check   # valida o JavaScript
-npm run build   # gera a compilação de produção
-npm run preview # serve a compilação localmente
+npm run check             # valida o JavaScript
+npm run build:admin      # bundle do administrador
+npm run build:companion  # bundle do acompanhado
+npm run preview           # serve a compilação localmente
 ```
+
+## Gerar os APKs
+
+A interface foi empacotada com **Capacitor** e o Android usa variantes de produto para gerar os dois aplicativos:
+
+```bash
+npm ci
+npm run apk:debug
+```
+
+Os APKs locais ficam em caminhos semelhantes a:
+
+```text
+android/app/build/outputs/apk/admin/debug/app-admin-debug.apk
+android/app/build/outputs/apk/companion/debug/app-companion-debug.apk
+```
+
+No Termux, recomendamos a compilação na nuvem porque o Android SDK e o Java ocupam bastante espaço.
+
+## Compilação na nuvem pelo GitHub Actions
 
 Os modelos de workflow ficam em `docs/workflows/`. Eles podem ser ativados no GitHub depois que o token usado para o push tiver a permissão `workflow`.
 
-## Gerar o APK de interface
-
-A interface foi empacotada com **Capacitor** para que o primeiro teste possa ser instalado no Android. O APK é de debug, não exige assinatura de produção e contém apenas os dados simulados da experiência.
-
-Para ativar a compilação na nuvem no GitHub, copie o modelo `docs/workflows/android-apk.yml.example` para `.github/workflows/android-apk.yml` e faça um novo push com uma conta que tenha o escopo `workflow`:
+Se os workflows ainda não estiverem no branch, execute:
 
 ```bash
 mkdir -p .github/workflows
@@ -50,13 +72,20 @@ git commit -m "ci: ativar compilacao e apk android"
 git push origin arena/019fbfa8-parentlock
 ```
 
-Depois, abra **Actions → Gerar APK de teste → Run workflow**. Aguarde a tarefa **Compilar ParentLock Android** terminar, baixe o artefato `parentlock-interface-debug` e abra o arquivo `app-debug.apk` no Android.
+Depois, abra **Actions → Gerar APK de teste → Run workflow**. O artefato `parentlock-interface-debug` conterá os dois APKs.
 
-Para uma compilação local com Android SDK configurado:
+Para acompanhar e baixar automaticamente no Termux:
 
 ```bash
-npm ci
-npm run apk:debug
+git pull --ff-only origin arena/019fbfa8-parentlock
+bash scripts/termux-apk.sh
 ```
 
-O APK será gerado em `android/app/build/outputs/apk/debug/app-debug.apk`. No Termux, recomendamos usar o workflow em nuvem porque o Android SDK e o Java ocupam bastante espaço. A próxima etapa, depois do feedback visual, será substituir os dados simulados por autenticação, backend, permissões nativas e mapa real.
+Para abrir um perfil específico depois do download:
+
+```bash
+bash scripts/termux-apk.sh admin
+bash scripts/termux-apk.sh companion
+```
+
+Depois do feedback visual, a próxima etapa será substituir os dados simulados por autenticação, backend, permissões nativas explícitas e mapa real.

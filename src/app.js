@@ -56,9 +56,13 @@ function icon(name, className = '') {
   return `<svg class="icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name] || iconPaths.info}</svg>`;
 }
 
+const APP_MODE = import.meta.env.VITE_APP_MODE || 'demo';
+const isCompanionBuild = APP_MODE === 'companion';
+const isDemoBuild = APP_MODE === 'demo';
+
 const state = {
-  mode: 'admin',
-  screen: 'overview',
+  mode: isCompanionBuild ? 'child' : 'admin',
+  screen: isCompanionBuild ? 'child-home' : 'overview',
   locationSharing: true,
   audioRequest: false,
   connected: false,
@@ -73,7 +77,19 @@ const state = {
     display: '0',
     justEvaluated: false,
   },
+  quiz: {
+    index: 0,
+    score: 0,
+    selected: null,
+  },
 };
+
+const quizQuestions = [
+  { question: 'Quanto é 7 × 8?', options: ['48', '54', '56', '64'], answer: '56' },
+  { question: 'Qual é o próximo número? 5, 10, 15, ...', options: ['18', '20', '21', '25'], answer: '20' },
+  { question: 'Quanto é 96 ÷ 12?', options: ['6', '8', '9', '12'], answer: '8' },
+  { question: 'Você tinha 30 pontos e ganhou 12. Quantos tem agora?', options: ['38', '40', '42', '48'], answer: '42' },
+];
 
 const screenLabels = {
   overview: 'Visão geral',
@@ -83,6 +99,7 @@ const screenLabels = {
   audio: 'Check-in de áudio',
   settings: 'Privacidade e ajustes',
   calculator: 'Calculadora',
+  quiz: 'Quiz matemático',
   'child-route': 'Minha rota',
   'child-home': 'Meu espaço',
   'child-settings': 'Privacidade',
@@ -100,6 +117,7 @@ const adminNav = [
 const childNav = [
   { id: 'child-home', label: 'Meu espaço', icon: 'homeHeart' },
   { id: 'calculator', label: 'Calculadora', icon: 'calculator' },
+  { id: 'quiz', label: 'Quiz matemático', icon: 'star' },
   { id: 'connection', label: 'Conexão', icon: 'link' },
   { id: 'child-settings', label: 'Privacidade', icon: 'shieldCheck' },
 ];
@@ -121,16 +139,19 @@ function navButton(item, current) {
 
 function renderSidebar() {
   const nav = state.mode === 'admin' ? adminNav : childNav;
+  const roleControls = isDemoBuild
+    ? `<div class="role-label">Visualizar como</div>
+    <div class="role-switcher" role="tablist" aria-label="Perfil do aplicativo">
+      <button class="${state.mode === 'admin' ? 'active' : ''}" data-mode="admin" type="button" role="tab" aria-selected="${state.mode === 'admin'}">${icon('users')} Admin</button>
+      <button class="${state.mode === 'child' ? 'active' : ''}" data-mode="child" type="button" role="tab" aria-selected="${state.mode === 'child'}">${icon('user')} Acompanhado</button>
+    </div>`
+    : `<div class="role-label">${isCompanionBuild ? 'Aplicativo acompanhado' : 'Aplicativo administrador'}</div>`;
   return `<aside class="sidebar">
     <div class="brand">
       <div class="brand-mark">${icon('shield')}</div>
       <div><div class="brand-name">ParentLock</div><div class="brand-tagline">Proteção que aproxima</div></div>
     </div>
-    <div class="role-label">Visualizar como</div>
-    <div class="role-switcher" role="tablist" aria-label="Perfil do aplicativo">
-      <button class="${state.mode === 'admin' ? 'active' : ''}" data-mode="admin" type="button" role="tab" aria-selected="${state.mode === 'admin'}">${icon('users')} Admin</button>
-      <button class="${state.mode === 'child' ? 'active' : ''}" data-mode="child" type="button" role="tab" aria-selected="${state.mode === 'child'}">${icon('user')} Acompanhado</button>
-    </div>
+    ${roleControls}
     <nav class="sidebar-nav" aria-label="Navegação principal">
       <div class="nav-section-label">Menu principal</div>
       ${nav.map((item) => navButton(item, state.screen)).join('')}
@@ -141,8 +162,8 @@ function renderSidebar() {
       <p>Localização e comunicação ficam visíveis e dependem de consentimento.</p>
     </div>
     <div class="sidebar-profile">
-      <div class="avatar">AM</div>
-      <div class="profile-copy"><strong>Ana Martins</strong><span>Conta administradora</span></div>
+      <div class="avatar ${isCompanionBuild ? 'lia' : ''}">${isCompanionBuild ? 'LM' : 'AM'}</div>
+      <div class="profile-copy"><strong>${isCompanionBuild ? 'Lia Martins' : 'Ana Martins'}</strong><span>${isCompanionBuild ? 'Aparelho acompanhado' : 'Conta administradora'}</span></div>
       <button class="profile-more" data-action="profile-menu" type="button" aria-label="Mais opções">${icon('more')}</button>
     </div>
   </aside>`;
@@ -256,6 +277,16 @@ function renderCalculatorCard() {
   return `<article class="panel calculator-card"><div class="panel-header"><div class="panel-title-wrap"><h2>Calculadora</h2><p>Uma ferramenta útil no dia a dia.</p></div>${icon('calculator')}</div><div class="calc-display" aria-live="polite">${state.calculator.display}</div><div class="calc-keys">${keys.map((key) => `<button class="calc-key ${['÷', '×', '-', '+', '='].includes(key) ? 'operator' : ''} ${key === '=' ? 'equals' : ''}" data-action="calc-key" data-key="${key}" type="button">${key}</button>`).join('')}</div></article>`;
 }
 
+function renderQuizPage() {
+  const quiz = state.quiz;
+  if (quiz.index >= quizQuestions.length) {
+    return `<div class="dashboard child-dashboard"><section class="page-heading"><div><div class="eyebrow">DESAFIO CONCLUÍDO</div><h1>Mandou bem!</h1><p>Você terminou o quiz matemático.</p></div><button class="secondary-button" data-nav="child-home" type="button">${icon('arrowRight')} Meu espaço</button></section><section class="quiz-result panel"><span class="quiz-result-icon">${icon('star')}</span><span class="soft-chip">RESULTADO FINAL</span><strong>${quiz.score}/${quizQuestions.length}</strong><p>${quiz.score === quizQuestions.length ? 'Acertou tudo. Que ótima sequência!' : 'Cada tentativa ajuda a aprender um pouco mais.'}</p><button class="primary-button" data-action="quiz-reset" type="button">${icon('refresh')} Jogar novamente</button></section></div>`;
+  }
+  const current = quizQuestions[quiz.index];
+  const hasAnswer = quiz.selected !== null;
+  return `<div class="dashboard child-dashboard"><section class="page-heading"><div><div class="eyebrow">DESAFIO MATEMÁTICO · ${quiz.index + 1}/${quizQuestions.length}</div><h1>Quiz rápido</h1><p>Responda no seu ritmo e acompanhe sua pontuação.</p></div><button class="secondary-button" data-nav="child-home" type="button">${icon('arrowRight')} Meu espaço</button></section><section class="quiz-layout"><article class="panel quiz-card quiz-main"><div class="quiz-progress"><span style="width:${((quiz.index + 1) / quizQuestions.length) * 100}%"></span></div><div class="quiz-card-top"><span class="soft-chip">${icon('star')} PONTOS ${quiz.score}</span><span class="quiz-counter">${quiz.index + 1} de ${quizQuestions.length}</span></div><h2>${current.question}</h2><div class="quiz-options">${current.options.map((option) => `<button class="quiz-option ${hasAnswer && option === current.answer ? 'correct' : ''} ${hasAnswer && option === quiz.selected && option !== current.answer ? 'incorrect' : ''}" data-action="quiz-answer" data-answer="${option}" type="button" ${hasAnswer ? 'disabled' : ''}>${option}${hasAnswer && option === current.answer ? icon('checkCircle') : ''}</button>`).join('')}</div>${hasAnswer ? `<div class="quiz-feedback ${quiz.selected === current.answer ? 'good' : 'try-again'}">${icon(quiz.selected === current.answer ? 'checkCircle' : 'info')}<span>${quiz.selected === current.answer ? 'Resposta certa!' : `A resposta é ${current.answer}. Vamos para a próxima?`}</span></div><button class="primary-button quiz-next" data-action="quiz-next" type="button">${quiz.index === quizQuestions.length - 1 ? 'Ver resultado' : 'Próxima pergunta'} ${icon('arrowRight')}</button>` : '<p class="quiz-help">Escolha uma alternativa para continuar.</p>'}</article><aside class="transparency-card quiz-side"><span class="soft-chip">${icon('calculator')} PARA APRENDER</span><h2>Pequenos desafios, grandes passos.</h2><p>O quiz funciona sem conexão com localização, áudio ou outros dados sensíveis. Ele é uma ferramenta de estudo para o dia a dia.</p><button class="secondary-button" data-nav="calculator" type="button">${icon('calculator')} Abrir calculadora</button></aside></section></div>`;
+}
+
 function renderChildHome() {
   return `<div class="dashboard child-dashboard"><section class="child-welcome"><div class="child-welcome-copy"><div class="eyebrow">SEU ESPAÇO · TUDO VISÍVEL</div><h1>Oi, Lia <span>✦</span></h1><p>Você está conectada com Ana. Seu aparelho está seguro.</p></div><div class="avatar lia">LM</div></section><section class="child-grid"><article class="sos-card"><div class="sos-copy"><div class="eyebrow">PRECISA DE AJUDA?</div><h2>Estamos com você.</h2><p>Toque no botão SOS para avisar Ana e compartilhar sua localização atual.</p></div><button class="sos-button" data-action="sos" type="button" aria-label="Enviar alerta SOS">SOS</button></article><article class="panel location-card"><div class="location-card-header"><h2>Minha localização</h2>${icon('location')}</div><div class="location-status"><span class="status-dot"></span> Compartilhando com Ana</div><p>Última atualização: agora · você pode pausar quando quiser.</p><button class="text-link" data-action="toggle-location" type="button">${state.locationSharing ? 'Pausar compartilhamento' : 'Retomar compartilhamento'} ${icon(state.locationSharing ? 'pause' : 'play')}</button></article><article class="panel child-route-card child-full-width"><div class="child-route-copy"><h2>Rota de hoje</h2><p>Casa → Escola Horizonte</p><div class="route-progress"><span class="route-progress-pin">${icon('home')}</span><div class="route-progress-track"></div><span class="route-progress-pin">${icon('navigation')}</span></div><div class="route-times"><span>08:12 <strong>saída</strong></span><span>chegada prevista 08:34</span></div></div><button class="secondary-button" data-action="view-child-route" type="button">${icon('map')} Ver minha rota</button></article><article class="transparency-card"><span class="soft-chip">${icon('mic')} COM ACEITE</span><h2>Check-in de áudio</h2><p>Ana pode enviar um pedido. Você decide se quer responder — nada é gravado escondido.</p><button class="secondary-button" data-action="audio-info" type="button">${icon('info')} Como funciona</button></article>${renderCalculatorCard()}</section></div>`;
 }
@@ -272,6 +303,7 @@ function renderCurrentScreen() {
   if (state.mode === 'child') {
     if (state.screen === 'child-home') return renderChildHome();
     if (state.screen === 'calculator') return renderChildCalculatorPage();
+    if (state.screen === 'quiz') return renderQuizPage();
     if (state.screen === 'child-route') return renderChildRoutePage();
     if (state.screen === 'connection') return renderConnectionPage();
     if (state.screen === 'child-settings') return renderSettingsPage(true);
@@ -518,6 +550,30 @@ function handleClick(event) {
     state.screen = 'settings';
     renderApp();
     showToast('Contatos SOS: espaço preparado para a próxima etapa.');
+    return;
+  }
+
+  if (action === 'quiz-answer') {
+    if (state.quiz.selected !== null) return;
+    state.quiz.selected = target.dataset.answer || '';
+    if (state.quiz.selected === quizQuestions[state.quiz.index].answer) state.quiz.score += 1;
+    renderApp();
+    showToast(state.quiz.selected === quizQuestions[state.quiz.index].answer ? 'Resposta certa!' : 'Quase! Confira a resposta e tente a próxima.', state.quiz.selected === quizQuestions[state.quiz.index].answer ? 'success' : 'warning');
+    return;
+  }
+
+  if (action === 'quiz-next') {
+    state.quiz.index += 1;
+    state.quiz.selected = null;
+    renderApp();
+    return;
+  }
+
+  if (action === 'quiz-reset') {
+    state.quiz.index = 0;
+    state.quiz.score = 0;
+    state.quiz.selected = null;
+    renderApp();
     return;
   }
 

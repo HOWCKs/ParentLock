@@ -6,12 +6,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "build": "npm run build:admin",
+    "build:admin": "VITE_APP_MODE=admin vite build",
+    "build:companion": "VITE_APP_MODE=companion vite build",
     "preview": "vite preview --host 0.0.0.0",
     "check": "node --check src/app.js",
-    "cap:sync": "npm run build && npx cap sync android",
+    "cap:sync": "npm run build:admin && npx cap sync android",
     "cap:open": "npx cap open android",
-    "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug"
+    "apk:admin": "npm run build:admin && npx cap sync android && (cd android && ./gradlew assembleAdminDebug --no-daemon --stacktrace)",
+    "apk:companion": "npm run build:companion && npx cap sync android && (cd android && ./gradlew assembleCompanionDebug --no-daemon --stacktrace)",
+    "apk:both": "npm run build:admin && npx cap sync android && (cd android && ./gradlew assembleAdminDebug --no-daemon --stacktrace) && npm run build:companion && npx cap sync android && (cd android && ./gradlew assembleCompanionDebug --no-daemon --stacktrace)",
+    "apk:debug": "npm run apk:both"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.6.8",
