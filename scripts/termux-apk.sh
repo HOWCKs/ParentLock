@@ -38,10 +38,22 @@ rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 echo "Baixando o artefato parentlock-interface-debug..."
-gh run download "$RUN_ID" \
-  --repo "$REPO" \
-  --name parentlock-interface-debug \
-  --dir "$OUTPUT_DIR"
+for ATTEMPT in 1 2 3; do
+  rm -rf "$OUTPUT_DIR"
+  mkdir -p "$OUTPUT_DIR"
+  if gh run download "$RUN_ID" \
+    --repo "$REPO" \
+    --name parentlock-interface-debug \
+    --dir "$OUTPUT_DIR"; then
+    break
+  fi
+  if [ "$ATTEMPT" = "3" ]; then
+    echo "Não foi possível baixar o artefato após 3 tentativas." >&2
+    exit 1
+  fi
+  echo "Download interrompido; tentando novamente em $((ATTEMPT * 5)) segundos..." >&2
+  sleep $((ATTEMPT * 5))
+done
 
 APK="$(find "$OUTPUT_DIR" -type f -name '*.apk' -print -quit)"
 if [ -z "$APK" ]; then
