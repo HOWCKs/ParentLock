@@ -1,0 +1,56 @@
+name: Gerar APK de teste
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'arena/**']
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Compilar ParentLock Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar componentes Android
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Instalar dependências web e nativas
+        run: npm ci
+
+      - name: Gerar bundle e sincronizar Capacitor
+        run: npm run cap:sync
+
+      - name: Compilar APK debug
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Disponibilizar APK para download
+        uses: actions/upload-artifact@v4
+        with:
+          name: parentlock-interface-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

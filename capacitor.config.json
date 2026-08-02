@@ -1,0 +1,8 @@
+{
+  "appId": "com.parentlock.family",
+  "appName": "ParentLock",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
