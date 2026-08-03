@@ -2,7 +2,7 @@
 
 ## Decisão
 
-O **ParentLock Admin gera o convite**. O **ParentLock Companion recebe e digita o código**. O vínculo só fica ativo depois de:
+A opção principal agora é o convite pelo **e-mail da conta**: o **ParentLock Admin informa o e-mail do Companion** e o Companion recebe o convite ao entrar com essa conta. O código continua como alternativa. O vínculo só fica ativo depois de:
 
 1. o administrador criar um convite autenticado;
 2. o Companion enviar uma solicitação usando o código;
@@ -10,7 +10,7 @@ O **ParentLock Admin gera o convite**. O **ParentLock Companion recebe e digita 
 4. o administrador aceitar;
 5. o Companion confirmar o compartilhamento.
 
-O código tem validade curta, é usado uma vez e não é armazenado em texto puro.
+O convite por e-mail usa o hash do endereço e aparece somente para a conta autenticada correspondente. Ele não depende de SMTP para o primeiro teste; o envio de uma mensagem externa pode ser conectado depois. O código alternativo tem validade curta, é usado uma vez e não é armazenado em texto puro.
 
 ## Dados que podem entrar no vínculo
 

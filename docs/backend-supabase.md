@@ -9,6 +9,7 @@ Execute nesta ordem:
 0002_pairing_functions.sql
 0003_rls_and_realtime.sql
 0004_activate_companion_device.sql
+0005_email_invites.sql
 ```
 
 Cada arquivo é independente para colar no SQL Editor. Não pule a ordem.

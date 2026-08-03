@@ -2,7 +2,7 @@ import L from 'leaflet';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { acceptPairingRequest, createPairingCode, ensureHousehold, listConnectedDevices, listPendingPairingRequests, redeemPairingCode, normalizePairingCode } from './services/pairing';
+import { acceptEmailInvite, acceptPairingRequest, createEmailInvite, createPairingCode, ensureHousehold, listConnectedDevices, listMyEmailInvites, listPendingPairingRequests, redeemPairingCode, normalizePairingCode } from './services/pairing';
 import { getCurrentSession, signInWithPassword, signUpWithPassword } from './services/auth';
 import { supabaseConfigured, supabase } from './services/supabase';
 import 'leaflet/dist/leaflet.css';
@@ -100,6 +100,7 @@ const state = {
   pairingCode: '',
   pairingCodeExpiresAt: null,
   pendingPairingRequests: [],
+  emailInvites: [],
   settings: {
     liveLocation: false,
     arrivalAlerts: false,
@@ -391,7 +392,10 @@ function renderConnectionPage() {
   const codeBlock = state.pairingCode
     ? `<div class="code-preview"><div class="code-preview-copy"><span>CÓDIGO DE CONVITE · EXPIRA EM 15 MIN</span><strong>${state.pairingCode}</strong></div><button class="copy-button" data-action="copy-code" type="button" aria-label="Copiar código">${icon('copy')}</button></div>`
     : `<div class="empty-connection-intro"><span class="empty-state-icon">${icon('link')}</span><div><strong>Nenhum convite ativo</strong><p>${canGenerate ? 'Gere um convite quando estiver pronto para iniciar um vínculo.' : 'A geração ficará disponível depois que a conta do administrador e o serviço seguro estiverem configurados.'}</p></div></div>`;
-  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">VÍNCULO COM ACEITE</div><h1>${child ? 'Conectar responsável' : 'Conectar aparelho'}</h1><p>${child ? 'Quando receber um convite, digite o código aqui.' : 'O administrador cria o código; o outro aparelho entra com aceite explícito.'}</p></div><span class="${supabaseConfigured ? 'live-chip' : 'neutral-chip'}">${icon(supabaseConfigured ? 'checkCircle' : 'lock')} ${serviceLabel}</span></section><section class="connection-layout"><article class="panel connection-card"><div class="stepper"><div class="step active"><span class="step-number">1</span><span>${child ? 'Receba o código' : 'Gere o convite'}</span></div><div class="step"><span class="step-number">2</span><span>${child ? 'Revise o pedido' : 'Aguarde o aceite'}</span></div><div class="step"><span class="step-number">3</span><span>Escolha o que compartilhar</span></div></div>${child ? `<label class="connection-form-label" for="pair-code-input">Código recebido</label><div class="input-wrap">${icon('key')}<input id="pair-code-input" class="text-input" maxlength="24" placeholder="Digite o código do convite" autocomplete="off" /></div><p class="form-help">O código será validado pelo serviço de conexão. Nenhum aparelho é vinculado somente por digitar um texto.</p><div class="form-actions"><button class="secondary-button" data-nav="child-settings" type="button">${icon('shieldCheck')} Privacidade</button><button class="primary-button" data-action="connect-code" type="button">${icon('link')} Validar convite</button></div>` : `${codeBlock}<div class="form-actions"><button class="primary-button" data-action="create-pairing-code" type="button" ${canGenerate ? '' : 'disabled'}>${icon('key')} ${state.pairingCode ? 'Gerar novo código' : 'Gerar código de convite'}</button><button class="secondary-button" data-action="connection-info" type="button">${icon('info')} Como funciona</button></div>`}<div class="consent-note">${icon('shieldCheck')}<span>Nada começa escondido: cada participante verá quais dados serão compartilhados, poderá aceitar ou recusar e poderá pausar o vínculo depois.</span></div></article><article class="panel connected-devices"><div class="panel-header"><div class="panel-title-wrap"><h2>Participantes vinculados</h2><p>${state.pendingPairingRequests.length ? 'Solicitações aguardando sua revisão.' : 'Estado real dos aparelhos autorizados.'}</p></div><span class="${state.connectedDevices.length ? 'live-chip' : 'neutral-chip'}">${state.connectedDevices.length} ativos</span></div>${renderParticipantsPanel(child)}</article></section></div>`;
+  const emailInviteBlock = child
+    ? `<div class="email-invite-status">${icon('mail')}<div><strong>Convites para este e-mail</strong><span>${state.emailInvites.length ? `${state.emailInvites.length} convite(s) aguardando aceite.` : 'Nenhum convite recebido ainda.'}</span></div></div>${state.emailInvites.map((invite) => `<div class="email-invite-pending"><div><strong>Convite de família</strong><span>Este convite expira em ${new Date(invite.expires_at).toLocaleString('pt-BR')}.</span></div><button class="primary-button" data-action="accept-email-invite" data-invite-id="${invite.id}" type="button">${icon('check')} Aceitar</button></div>`).join('')}`
+    : `<div class="email-invite-form"><label class="connection-form-label" for="invite-email-input">Convidar pelo e-mail da conta</label><div class="input-wrap">${icon('mail')}<input id="invite-email-input" class="text-input" type="email" placeholder="e-mail do Companion" autocomplete="off" /></div><p class="form-help">O endereço é usado apenas para localizar a conta autenticada. A outra pessoa ainda precisará aceitar.</p><button class="secondary-button" data-action="create-email-invite" type="button" ${canGenerate ? '' : 'disabled'}>${icon('send')} Enviar convite por e-mail</button></div>`;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">VÍNCULO COM ACEITE</div><h1>${child ? 'Conectar responsável' : 'Conectar aparelho'}</h1><p>${child ? 'Quando receber um convite, digite o código aqui.' : 'O administrador cria o código; o outro aparelho entra com aceite explícito.'}</p></div><span class="${supabaseConfigured ? 'live-chip' : 'neutral-chip'}">${icon(supabaseConfigured ? 'checkCircle' : 'lock')} ${serviceLabel}</span></section><section class="connection-layout"><article class="panel connection-card"><div class="stepper"><div class="step active"><span class="step-number">1</span><span>${child ? 'Receba o código' : 'Gere o convite'}</span></div><div class="step"><span class="step-number">2</span><span>${child ? 'Revise o pedido' : 'Aguarde o aceite'}</span></div><div class="step"><span class="step-number">3</span><span>Escolha o que compartilhar</span></div></div>${child ? `${emailInviteBlock}<label class="connection-form-label" for="pair-code-input">Código recebido</label><div class="input-wrap">${icon('key')}<input id="pair-code-input" class="text-input" maxlength="24" placeholder="Digite o código do convite" autocomplete="off" /></div><p class="form-help">O código será validado pelo serviço de conexão. Nenhum aparelho é vinculado somente por digitar um texto.</p><div class="form-actions"><button class="secondary-button" data-nav="child-settings" type="button">${icon('shieldCheck')} Privacidade</button><button class="primary-button" data-action="connect-code" type="button">${icon('link')} Validar convite</button></div>` : `${emailInviteBlock}${codeBlock}<div class="form-actions"><button class="primary-button" data-action="create-pairing-code" type="button" ${canGenerate ? '' : 'disabled'}>${icon('key')} ${state.pairingCode ? 'Gerar novo código' : 'Gerar código de convite'}</button><button class="secondary-button" data-action="connection-info" type="button">${icon('info')} Como funciona</button></div>`}<div class="consent-note">${icon('shieldCheck')}<span>Nada começa escondido: cada participante verá quais dados serão compartilhados, poderá aceitar ou recusar e poderá pausar o vínculo depois.</span></div></article><article class="panel connected-devices"><div class="panel-header"><div class="panel-title-wrap"><h2>Participantes vinculados</h2><p>${state.pendingPairingRequests.length ? 'Solicitações aguardando sua revisão.' : 'Estado real dos aparelhos autorizados.'}</p></div><span class="${state.connectedDevices.length ? 'live-chip' : 'neutral-chip'}">${state.connectedDevices.length} ativos</span></div>${renderParticipantsPanel(child)}</article></section></div>`;
 }
 function renderAudioPage() {
   const hasDevice = state.connectedDevices.length > 0;
@@ -605,18 +609,25 @@ async function handleAuthSubmit() {
       state.householdId = household.householdId;
       await loadHouseholdState();
     } else state.authError = 'Conta autenticada, mas a família ainda não pôde ser criada. Verifique a migration do Supabase.';
+  } else {
+    await loadHouseholdState();
   }
   renderApp();
 }
 
 async function loadHouseholdState() {
-  if (state.mode !== 'admin' || !state.householdId) return;
-  const [pending, devices] = await Promise.all([
-    listPendingPairingRequests(state.householdId),
-    listConnectedDevices(state.householdId),
-  ]);
-  if (pending.ok) state.pendingPairingRequests = pending.requests;
-  if (devices.ok) state.connectedDevices = devices.devices;
+  if (state.mode === 'admin') {
+    if (!state.householdId) return;
+    const [pending, devices] = await Promise.all([
+      listPendingPairingRequests(state.householdId),
+      listConnectedDevices(state.householdId),
+    ]);
+    if (pending.ok) state.pendingPairingRequests = pending.requests;
+    if (devices.ok) state.connectedDevices = devices.devices;
+    return;
+  }
+  const invites = await listMyEmailInvites();
+  if (invites.ok) state.emailInvites = invites.invites;
 }
 
 async function hydrateAuth() {
@@ -632,6 +643,8 @@ async function hydrateAuth() {
         state.householdId = household.householdId;
         await loadHouseholdState();
       }
+    } else if (state.session) {
+      await loadHouseholdState();
     }
   } catch {
     state.session = null;
@@ -879,6 +892,37 @@ async function handleClick(event) {
     }
     if (navigator.clipboard) navigator.clipboard.writeText(state.pairingCode).catch(() => {});
     showToast('Código de convite copiado.');
+    return;
+  }
+
+  if (action === 'create-email-invite') {
+    const email = document.querySelector('#invite-email-input')?.value.trim();
+    if (!email || !email.includes('@')) {
+      showToast('Digite o e-mail da conta Companion.', 'warning');
+      return;
+    }
+    showToast('Criando convite por e-mail…');
+    const result = await createEmailInvite(email);
+    if (!result.ok) {
+      showToast('Não foi possível criar o convite por e-mail.', 'warning');
+      return;
+    }
+    showToast('Convite criado. O Companion verá a solicitação ao entrar com esse e-mail.');
+    return;
+  }
+
+  if (action === 'accept-email-invite') {
+    const inviteId = target.dataset.inviteId;
+    if (!inviteId) return;
+    showToast('Aceitando convite…');
+    const result = await acceptEmailInvite(inviteId);
+    if (!result.ok) {
+      showToast('Não foi possível aceitar este convite.', 'warning');
+      return;
+    }
+    await loadHouseholdState();
+    renderApp();
+    showToast('Convite aceito. Revise as permissões do vínculo.');
     return;
   }
 

@@ -15,6 +15,33 @@ export async function ensureHousehold() {
   return { ok: true, householdId: data };
 }
 
+export async function createEmailInvite(email) {
+  if (!supabaseConfigured || !supabase) return { ok: false, reason: 'not-configured' };
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail.includes('@')) return { ok: false, reason: 'invalid-email' };
+  const { data, error } = await supabase.rpc('create_email_invite', {
+    input_email: normalizedEmail,
+  });
+  if (error) return { ok: false, reason: 'request-failed', error };
+  return { ok: true, data };
+}
+
+export async function listMyEmailInvites() {
+  if (!supabaseConfigured || !supabase) return { ok: false, invites: [], reason: 'not-configured' };
+  const { data, error } = await supabase.rpc('list_my_email_invites');
+  if (error) return { ok: false, invites: [], reason: 'request-failed', error };
+  return { ok: true, invites: data || [] };
+}
+
+export async function acceptEmailInvite(inviteId) {
+  if (!supabaseConfigured || !supabase || !inviteId) return { ok: false, reason: 'not-configured' };
+  const { data, error } = await supabase.rpc('accept_email_invite', {
+    input_invite_id: inviteId,
+  });
+  if (error) return { ok: false, reason: 'request-failed', error };
+  return { ok: data === true, data };
+}
+
 export async function listPendingPairingRequests(householdId) {
   if (!supabaseConfigured || !supabase || !householdId) return { ok: false, requests: [], reason: 'not-configured' };
   const { data, error } = await supabase

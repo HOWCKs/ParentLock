@@ -3709,6 +3709,81 @@ html[data-theme='amoled'] .real-map-canvas .leaflet-control-attribution {
   font-size: 9px;
 }
 
+.email-invite-form,
+.email-invite-status,
+.email-invite-pending {
+  padding: 13px;
+  border-radius: 12px;
+}
+
+.email-invite-form {
+  background: var(--blue-pale);
+  border: 1px solid rgba(107, 141, 247, 0.16);
+}
+
+.email-invite-form .connection-form-label {
+  margin-top: 0;
+}
+
+.email-invite-form .secondary-button {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.email-invite-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--mint-dark);
+  background: var(--mint-pale);
+}
+
+.email-invite-status > .icon {
+  width: 17px;
+  height: 17px;
+}
+
+.email-invite-status > div,
+.email-invite-pending > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.email-invite-status strong,
+.email-invite-status span,
+.email-invite-pending strong,
+.email-invite-pending span {
+  display: block;
+}
+
+.email-invite-status strong,
+.email-invite-pending strong {
+  font-size: 11px;
+}
+
+.email-invite-status span,
+.email-invite-pending span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.email-invite-pending {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 9px;
+  background: var(--mint-pale);
+  border: 1px solid rgba(81, 212, 182, 0.2);
+}
+
+.email-invite-pending .primary-button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 10px;
+}
+
 .empty-connection-intro {
   display: flex;
   align-items: center;
