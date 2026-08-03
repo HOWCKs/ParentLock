@@ -167,9 +167,12 @@ h3 {
   box-shadow: 0 7px 20px rgba(81, 212, 182, 0.22);
 }
 
-.brand-mark svg {
+.brand-mark svg,
+.brand-mark img {
+  display: block;
   width: 21px;
   height: 21px;
+  object-fit: contain;
   stroke-width: 2.4;
 }
 
@@ -2899,16 +2902,23 @@ h3 {
   font-weight: 700;
 }
 
-.onboarding-brand .brand-mark {
+.onboarding-brand .brand-mascot {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 56px;
+  height: 56px;
+  padding: 4px;
   place-items: center;
+  background: linear-gradient(145deg, #1c355d, #0d1c37);
+  border: 1px solid rgba(81, 212, 182, 0.38);
+  border-radius: 17px;
+  box-shadow: 0 9px 24px rgba(16, 26, 50, 0.22), 0 0 0 5px rgba(81, 212, 182, 0.08);
 }
 
-.onboarding-brand .brand-mark .icon {
-  width: 21px;
-  height: 21px;
+.onboarding-brand .brand-mascot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .onboarding-eyebrow {
@@ -3180,7 +3190,8 @@ html[data-theme='amoled'] .real-map-canvas .leaflet-control-attribution {
   border-radius: 11px 11px 11px 4px;
 }
 
-.map-first-brand .brand-mark .icon {
+.map-first-brand .brand-mark .icon,
+.map-first-brand .brand-mark img {
   width: 19px;
   height: 19px;
 }

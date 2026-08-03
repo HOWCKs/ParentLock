@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Escudo ParentLock</title>
+  <desc id="desc">Escudo azul-marinho com proteção verde.</desc>
+  <defs>
+    <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#213D6A"/>
+      <stop offset="1" stop-color="#0F203E"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#shield)" stroke="#51D4B6" stroke-width="18" stroke-linejoin="round" d="M256 35 441 99v143c0 111-72 190-185 235C143 432 71 353 71 242V99Z"/>
+  <path fill="none" stroke="#F0B24E" stroke-width="12" stroke-linejoin="round" d="M256 76 400 126v112c0 84-52 148-144 190-92-42-144-106-144-190V126Z" opacity=".9"/>
+  <path fill="#51D4B6" d="M256 143c20 49 58 83 108 103-50 20-88 54-108 103-20-49-58-83-108-103 50-20 88-54 108-103Z"/>
+  <path fill="#10203D" d="M256 182c13 31 37 53 69 66-32 13-56 35-69 66-13-31-37-53-69-66 32-13 56-35 69-66Z"/>
+</svg>
