@@ -26,6 +26,10 @@ Nesta versão:
 - o áudio é somente um pedido de check-in com aceite explícito;
 - não existe escuta oculta ou contínua;
 
+## Primeiro acesso
+
+Ao abrir cada APK pela primeira vez, o aplicativo apresenta uma tela de preparação. O usuário deve autorizar localização e notificações antes de entrar. O microfone não é solicitado no início; qualquer check-in de áudio só poderá pedir permissão depois de um aceite visível. Após as permissões, o Companion abre a tela de conexão para receber o código criado pelo serviço seguro de vínculo.
+
 ## Executar no Termux
 
 ```bash
