@@ -3743,6 +3743,13 @@ html[data-theme='amoled'] .real-map-canvas .leaflet-control-attribution {
   height: 17px;
 }
 
+.email-invite-status .ghost-button {
+  flex: 0 0 auto;
+  min-height: 29px;
+  padding: 0 8px;
+  font-size: 9px;
+}
+
 .email-invite-status > div,
 .email-invite-pending > div {
   min-width: 0;
