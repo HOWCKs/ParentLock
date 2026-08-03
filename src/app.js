@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import { Geolocation } from '@capacitor/geolocation';
 import 'leaflet/dist/leaflet.css';
 import './styles.css';
 
@@ -70,13 +71,18 @@ const state = {
   screen: isCompanionBuild ? 'child-home' : 'overview',
   theme: savedTheme === 'amoled' ? 'amoled' : 'light',
   sheetExpanded: false,
-  locationSharing: true,
+  locationSharing: false,
+  locationPermission: 'prompt',
+  userLocation: null,
+  locationAccuracy: null,
   audioRequest: false,
   connected: false,
+  connectedDevices: [],
+  pairingCode: '',
   settings: {
-    liveLocation: true,
-    arrivalAlerts: true,
-    audioRequests: true,
+    liveLocation: false,
+    arrivalAlerts: false,
+    audioRequests: false,
     history: false,
   },
   calculator: {
@@ -173,8 +179,8 @@ function renderSidebar() {
       <p>Localização e comunicação ficam visíveis e dependem de consentimento.</p>
     </div>
     <div class="sidebar-profile">
-      <div class="avatar ${isCompanionBuild ? 'lia' : ''}">${isCompanionBuild ? 'LM' : 'AM'}</div>
-      <div class="profile-copy"><strong>${isCompanionBuild ? 'Lia Martins' : 'Ana Martins'}</strong><span>${isCompanionBuild ? 'Aparelho acompanhado' : 'Conta administradora'}</span></div>
+      <div class="avatar ${isCompanionBuild ? 'lia' : ''}">${isCompanionBuild ? 'EU' : 'AD'}</div>
+      <div class="profile-copy"><strong>${isCompanionBuild ? 'Acompanhado' : 'Administrador'}</strong><span>${isCompanionBuild ? 'Este aparelho' : 'Conta administradora'}</span></div>
       <button class="profile-more" data-action="profile-menu" type="button" aria-label="Mais opções">${icon('more')}</button>
     </div>
   </aside>`;
@@ -182,8 +188,8 @@ function renderSidebar() {
 
 function renderTopbar() {
   const label = screenLabels[state.screen] || 'ParentLock';
-  const userName = state.mode === 'admin' ? 'Ana Martins' : 'Lia Martins';
-  const userInitials = state.mode === 'admin' ? 'AM' : 'LM';
+  const userName = state.mode === 'admin' ? 'Administrador' : 'Acompanhado';
+  const userInitials = state.mode === 'admin' ? 'AD' : 'EU';
   return `<header class="topbar">
     <div class="topbar-left">
       <button class="mobile-menu" data-action="mobile-menu" type="button" aria-label="Abrir menu">${icon('menu')}</button>
@@ -207,22 +213,6 @@ function renderMobileNav() {
   </nav>`;
 }
 
-function mapMarkup(large = false) {
-  return `<div class="map-canvas ${large ? 'map-canvas-large' : ''}" aria-label="Mapa ilustrativo com rota de Lia">
-    <div class="map-streets"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-    <span class="map-label label-one">Jardim Aurora</span><span class="map-label label-two">Av. das Flores</span><span class="map-label label-three">Praça Central</span><span class="map-label label-four">Vila Nova</span>
-    <svg class="route-line" viewBox="0 0 800 360" preserveAspectRatio="none" aria-hidden="true">
-      <path d="M155 280 C205 258, 204 213, 275 221 S329 280, 390 250 S447 176, 506 153 S572 94, 604 103" />
-      <path class="route-dash" d="M155 280 C205 258, 204 213, 275 221 S329 280, 390 250 S447 176, 506 153 S572 94, 604 103" />
-    </svg>
-    <div class="pin-pulse"></div>
-    <div class="map-pin pin-home" aria-label="Casa">${icon('home')}</div>
-    <div class="map-pin pin-lia" aria-label="Lia em movimento">${icon('navigation')}</div>
-    <div class="map-person-card"><div class="avatar lia">LM</div><div><strong>Lia Martins</strong><span><span class="status-dot"></span> Em movimento · agora</span></div></div>
-    <div class="map-controls"><button class="map-control" data-action="zoom-in" type="button" aria-label="Aumentar zoom">${icon('zoomIn')}</button><button class="map-control" data-action="zoom-out" type="button" aria-label="Diminuir zoom">${icon('zoomOut')}</button><button class="map-control" data-action="center-map" type="button" aria-label="Centralizar mapa">${icon('locate')}</button></div>
-  </div>`;
-}
-
 function realMapMarkup() {
   return `<div class="real-map-canvas" data-real-map aria-label="Mapa real da família com rota compartilhada"></div>`;
 }
@@ -232,53 +222,54 @@ function metricCard({ iconName, label, value, foot, trend, tone = '' }) {
 }
 
 function renderAdminOverview() {
+  const hasLocation = state.locationPermission === 'granted' && state.userLocation;
+  const locationStatus = hasLocation ? `Localização ativa · precisão aproximada de ${state.locationAccuracy || '—'} m` : 'Localização ainda não ativada';
   return `<div class="map-first-page ${state.sheetExpanded ? 'sheet-expanded' : ''}">
     <header class="map-first-toolbar">
       <div class="map-first-brand"><span class="brand-mark">${icon('shield')}</span><div><strong>ParentLock</strong><small>Mapa da família</small></div></div>
-      <div class="map-first-actions"><span class="live-chip"><span class="status-dot"></span> 2 online</span><button class="theme-toggle map-theme-toggle" data-action="toggle-theme" type="button" aria-label="Alternar tema AMOLED">${icon(state.theme === 'amoled' ? 'sun' : 'moon')}<span>${state.theme === 'amoled' ? 'AMOLED' : 'Claro'}</span></button><button class="map-profile" data-action="profile-menu" type="button" aria-label="Abrir perfil">AM</button></div>
+      <div class="map-first-actions"><span class="neutral-chip">Nenhuma conexão</span><button class="theme-toggle map-theme-toggle" data-action="toggle-theme" type="button" aria-label="Alternar tema AMOLED">${icon(state.theme === 'amoled' ? 'sun' : 'moon')}<span>${state.theme === 'amoled' ? 'AMOLED' : 'Claro'}</span></button><button class="map-profile" data-action="profile-menu" type="button" aria-label="Abrir perfil">AD</button></div>
     </header>
     <section class="map-first-stage">
       ${realMapMarkup()}
-      <div class="map-place-pill">${icon('location')} Goiânia · agora</div>
-      <div class="map-live-card"><div class="avatar lia">LM</div><div><strong>Lia Martins</strong><span><span class="status-dot"></span> Em movimento · agora</span></div><button data-nav="map" type="button" aria-label="Abrir detalhes da rota">${icon('chevronRight')}</button></div>
+      <div class="map-place-pill">${icon('map')} Mapa geral</div>
+      <div class="map-live-card"><span class="map-empty-icon">${icon(hasLocation ? 'location' : 'locate')}</span><div><strong>Seu aparelho</strong><span class="${hasLocation ? 'location-ready' : ''}">${icon(hasLocation ? 'checkCircle' : 'info')} ${locationStatus}</span></div><button data-action="${hasLocation ? 'open-pairing' : 'request-location'}" type="button" aria-label="${hasLocation ? 'Conectar aparelho' : 'Ativar localização'}">${icon(hasLocation ? 'plus' : 'locate')}</button></div>
       <div class="map-action-stack"><button class="map-control" data-action="zoom-in" type="button" aria-label="Aumentar zoom">${icon('zoomIn')}</button><button class="map-control" data-action="zoom-out" type="button" aria-label="Diminuir zoom">${icon('zoomOut')}</button><button class="map-control" data-action="center-map" type="button" aria-label="Centralizar mapa">${icon('locate')}</button></div>
     </section>
     <nav class="map-floating-nav" aria-label="Navegação do mapa">
       <button class="map-nav-item active" data-nav="overview" type="button">${icon('map')}<span>Mapa</span></button>
       <button class="map-nav-item" data-nav="map" type="button">${icon('route')}<span>Rotas</span></button>
-      <button class="map-nav-item" data-nav="alerts" type="button">${icon('alert')}<span>Alertas</span><b>1</b></button>
+      <button class="map-nav-item" data-nav="alerts" type="button">${icon('alert')}<span>Alertas</span></button>
       <button class="map-nav-item" data-nav="connection" type="button">${icon('link')}<span>Conexão</span></button>
       <button class="map-nav-item" data-nav="settings" type="button">${icon('more')}<span>Mais</span></button>
     </nav>
     <section class="map-bottom-sheet" aria-label="Detalhes da família">
       <button class="sheet-handle" data-action="toggle-sheet" type="button" aria-label="${state.sheetExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}"><span></span><small>${state.sheetExpanded ? 'Toque para recolher' : 'Deslize para ver detalhes'}</small></button>
       <div class="sheet-content">
-        <div class="sheet-heading"><div><div class="eyebrow">FAMÍLIA AO VIVO</div><h2>Quem está por perto</h2></div><span class="live-chip"><span class="status-dot"></span> 2 conectados</span></div>
-        <div class="sheet-members"><div class="sheet-member"><div class="avatar lia">LM</div><div><strong>Lia Martins</strong><span>${icon('location')} Indo para Escola Horizonte</span></div><b>agora</b></div><div class="sheet-member"><div class="avatar">AM</div><div><strong>Ana Martins <em>você</em></strong><span>${icon('home')} Casa · compartilhando</span></div><b>agora</b></div></div>
-        <article class="sheet-route-card"><div class="sheet-route-icon">${icon('route')}</div><div class="sheet-route-copy"><strong>Lia está a caminho</strong><span>Casa → Escola Horizonte · chegada prevista 08:34</span></div><button class="text-link" data-nav="map" type="button">Ver rota ${icon('arrowRight')}</button></article>
-        <div class="sheet-stat-grid"><div class="sheet-stat"><span class="sheet-stat-icon mint">${icon('location')}</span><div><strong>2 de 2</strong><small>localizações ativas</small></div></div><div class="sheet-stat"><span class="sheet-stat-icon coral">${icon('alert')}</span><div><strong>01</strong><small>alerta pendente</small></div></div></div>
-        <div class="sheet-actions"><button class="secondary-button" data-nav="connection" type="button">${icon('plus')} Conectar aparelho</button><button class="secondary-button" data-nav="alerts" type="button">${icon('bell')} Ver alertas</button></div>
+        <div class="sheet-heading"><div><div class="eyebrow">FAMÍLIA</div><h2>Nenhum aparelho conectado</h2></div><span class="neutral-chip">aguardando vínculo</span></div>
+        <div class="empty-sheet-state"><span class="empty-state-icon">${icon('users')}</span><strong>Comece conectando um aparelho</strong><p>Quando uma pessoa aceitar o vínculo, a localização compartilhada aparecerá aqui.</p><button class="primary-button" data-nav="connection" type="button">${icon('plus')} Conectar aparelho</button></div>
+        <article class="sheet-route-card"><div class="sheet-route-icon">${icon('route')}</div><div class="sheet-route-copy"><strong>Nenhuma rota compartilhada</strong><span>As rotas aparecerão somente depois que um aparelho for conectado.</span></div></article>
+        <div class="sheet-stat-grid"><div class="sheet-stat"><span class="sheet-stat-icon mint">${icon('location')}</span><div><strong>0</strong><small>localizações compartilhadas</small></div></div><div class="sheet-stat"><span class="sheet-stat-icon coral">${icon('alert')}</span><div><strong>0</strong><small>alertas pendentes</small></div></div></div>
+        <div class="sheet-actions"><button class="secondary-button" data-action="request-location" type="button">${icon('locate')} ${hasLocation ? 'Atualizar localização' : 'Ativar localização'}</button><button class="secondary-button" data-nav="settings" type="button">${icon('shieldCheck')} Privacidade</button></div>
       </div>
     </section>
   </div>`;
 }
 function renderMapPage() {
-  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">LOCALIZAÇÃO COMPARTILHADA</div><h1>Mapa e rotas</h1><p>Acompanhe a rota ativa de Lia com atualização transparente.</p></div><div class="page-heading-actions"><button class="secondary-button" data-action="share-route" type="button">${icon('send')} Compartilhar rota</button><button class="primary-button" data-action="center-map" type="button">${icon('locate')} Centralizar</button></div></section><section class="inner-grid"><article class="panel map-panel large-map"><div class="panel-header"><div class="panel-title-wrap"><h2>Rota atual</h2><p>Casa → Escola Horizonte · iniciada às 08:12</p></div><span class="live-chip"><span class="status-dot"></span> ATUALIZADO AGORA</span></div><div class="map-toolbar"><button class="map-filter active" data-action="map-filter" type="button">${icon('users')} Lia Martins</button><button class="map-filter" data-action="map-filter" type="button">${icon('route')} Rota de hoje</button></div>${realMapMarkup()}<div class="map-footer"><div class="map-footer-left">${icon('location')}<span>Precisão aproximada</span><strong>12 m</strong></div><button class="map-footer-right text-link" data-action="map-details" type="button">Detalhes da atualização ${icon('chevronRight')}</button></div></article><aside class="panel route-summary"><div class="route-summary-header"><div><h2>Detalhes da rota</h2><p>Deslocamento em andamento</p></div><span class="route-distance">2,4 km</span></div><div class="route-points"><div class="route-point"><strong>Casa Martins</strong><span>${icon('location')} Rua das Acácias, 120</span><small>08:12</small></div><div class="route-point"><strong>Lia está a caminho</strong><span>${icon('navigation')} Av. das Flores, próximo à Praça Central</span><small>agora</small></div><div class="route-point"><strong>Escola Horizonte</strong><span>${icon('home')} Previsão de chegada</span><small>08:34</small></div></div><button class="secondary-button" data-action="route-alert" type="button">${icon('bell')} Avisar chegada automaticamente</button></aside></section></div>`;
+  const hasLocation = state.locationPermission === 'granted' && state.userLocation;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">LOCALIZAÇÃO COMPARTILHADA</div><h1>Mapa e rotas</h1><p>O mapa exibirá somente posições e rotas autorizadas pelos participantes.</p></div><div class="page-heading-actions"><button class="secondary-button" data-nav="connection" type="button">${icon('plus')} Conectar aparelho</button><button class="primary-button" data-action="${hasLocation ? 'center-map' : 'request-location'}" type="button">${icon(hasLocation ? 'locate' : 'location')} ${hasLocation ? 'Centralizar' : 'Ativar localização'}</button></div></section><section class="inner-grid"><article class="panel map-panel large-map"><div class="panel-header"><div class="panel-title-wrap"><h2>Mapa ao vivo</h2><p>${hasLocation ? 'Sua localização está disponível neste aparelho.' : 'Ative a localização para começar.'}</p></div><span class="${hasLocation ? 'live-chip' : 'neutral-chip'}">${hasLocation ? `<span class="status-dot"></span> ATIVO` : 'AGUARDANDO PERMISSÃO'}</span></div>${realMapMarkup()}<div class="map-footer"><div class="map-footer-left">${icon(hasLocation ? 'location' : 'info')}<span>Precisão</span><strong>${hasLocation ? `${state.locationAccuracy || '—'} m` : 'não disponível'}</strong></div><button class="map-footer-right text-link" data-action="request-location" type="button">${hasLocation ? 'Atualizar localização' : 'Permitir localização'} ${icon('chevronRight')}</button></div></article><aside class="panel route-summary"><div class="route-summary-header"><div><h2>Rotas compartilhadas</h2><p>Nenhum vínculo ativo</p></div><span class="route-distance">0 rotas</span></div><div class="empty-sheet-state"><span class="empty-state-icon">${icon('route')}</span><strong>Nenhuma rota disponível</strong><p>Quando um participante compartilhar uma rota, ela aparecerá aqui com os detalhes e o horário de atualização.</p><button class="primary-button" data-nav="connection" type="button">${icon('link')} Criar vínculo</button></div></aside></section></div>`;
 }
-
 function renderAlertsPage() {
-  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">CENTRAL DE SEGURANÇA</div><h1>Alertas</h1><p>Notificações importantes, sem alarmismo e com contexto.</p></div><button class="secondary-button" data-action="mark-alerts-read" type="button">${icon('check')} Marcar como lidos</button></section><section class="alert-overview"><article class="panel alert-stat-card"><div class="alert-stat-icon">${icon('bell')}</div><div><strong>01</strong><span>alerta pendente hoje</span></div></article><div class="alert-banner">${icon('info')}<div class="alert-banner-copy"><strong>Sem emergência ativa</strong><p>O último alerta foi uma chegada confirmada. Você pode revisar as regras de notificação a qualquer momento.</p></div><button class="text-link" data-nav="settings" type="button">Ajustar ${icon('chevronRight')}</button></div></section><article class="panel alert-list-panel"><div class="panel-header"><div class="panel-title-wrap"><h2>Histórico de alertas</h2><p>Últimos eventos compartilhados pelos aparelhos.</p></div><button class="map-filter active" data-action="alert-filter" type="button">Todos ${icon('chevronDown')}</button></div><div class="alert-list"><div class="alert-row"><div class="alert-row-icon">${icon('alert')}</div><div class="alert-row-copy"><strong>Chegada confirmada</strong><p>Lia chegou à Escola Horizonte · localização compartilhada</p></div><span class="alert-row-time">08:26</span><span class="live-chip">novo</span></div><div class="alert-row"><div class="alert-row-icon safe">${icon('checkCircle')}</div><div class="alert-row-copy"><strong>Check-in de segurança</strong><p>Lia marcou “estou bem” e encerrou a rota da manhã.</p></div><span class="alert-row-time">ontem</span></div><div class="alert-row"><div class="alert-row-icon safe">${icon('route')}</div><div class="alert-row-copy"><strong>Rota concluída</strong><p>João concluiu a rota “Treino de futebol”.</p></div><span class="alert-row-time">ontem</span></div><div class="alert-row"><div class="alert-row-icon">${icon('pause')}</div><div class="alert-row-copy"><strong>Compartilhamento pausado</strong><p>João pausou a localização por 30 minutos, com aviso no aparelho.</p></div><span class="alert-row-time">09 ago</span></div></div></article></div>`;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">CENTRAL DE SEGURANÇA</div><h1>Alertas</h1><p>Aqui aparecerão somente eventos reais enviados pelos aparelhos vinculados.</p></div><span class="neutral-chip">0 alertas</span></section><section class="alert-overview"><article class="panel alert-stat-card"><div class="alert-stat-icon">${icon('bell')}</div><div><strong>0</strong><span>alertas pendentes</span></div></article><div class="alert-banner">${icon('info')}<div class="alert-banner-copy"><strong>Nenhum evento registrado</strong><p>Os alertas serão exibidos depois que houver um vínculo ativo e uma permissão de notificação.</p></div><button class="text-link" data-nav="settings" type="button">Configurar ${icon('chevronRight')}</button></div></section><article class="panel alert-list-panel"><div class="panel-header"><div class="panel-title-wrap"><h2>Histórico de alertas</h2><p>Sem dados para exibir.</p></div></div><div class="empty-sheet-state alert-empty-state"><span class="empty-state-icon">${icon('bell')}</span><strong>Nenhum alerta por enquanto</strong><p>Quando houver uma chegada, SOS ou mudança importante, ela aparecerá aqui com data e contexto.</p><button class="primary-button" data-nav="connection" type="button">${icon('plus')} Conectar aparelho</button></div></article></div>`;
 }
-
 function renderConnectionPage() {
   const child = state.mode === 'child';
-  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">VÍNCULO COM ACEITE</div><h1>${child ? 'Conectar responsável' : 'Conectar aparelho'}</h1><p>${child ? 'Insira o código enviado pelo seu responsável.' : 'Adicione alguém à sua família usando um código único.'}</p></div><span class="soft-chip">${icon('lock')} Criptografado</span></section><section class="connection-layout"><article class="panel connection-card"><div class="stepper"><div class="step active"><span class="step-number">1</span><span>Digite o código</span></div><div class="step ${state.connected ? 'active' : ''}"><span class="step-number">2</span><span>Revise o vínculo</span></div><div class="step"><span class="step-number">3</span><span>Comece a compartilhar</span></div></div><label class="connection-form-label" for="pair-code-input">Código de conexão</label><div class="input-wrap">${icon('key')}<input id="pair-code-input" class="text-input" maxlength="12" placeholder="Ex.: PL-4821" autocomplete="off" /></div><p class="form-help">O código expira em 15 minutos e só funciona quando os dois aparelhos confirmam o vínculo.</p><div class="form-actions"><button class="secondary-button" data-action="generate-code" type="button">${icon('refresh')} Gerar código</button><button class="primary-button" data-action="connect-code" type="button">${icon('link')} ${state.connected ? 'Vínculo revisado' : 'Continuar'}</button></div><div class="code-preview"><div class="code-preview-copy"><span>${child ? 'Código do responsável' : 'Seu código temporário'}</span><strong>${child ? 'PL-4821' : 'PL-4821'}</strong></div><button class="copy-button" data-action="copy-code" type="button" aria-label="Copiar código">${icon('copy')}</button></div><div class="consent-note">${icon('shieldCheck')}<span>Nada começa escondido: a pessoa convidada vê quais dados serão compartilhados, pode aceitar ou recusar e pode pausar o vínculo depois.</span></div></article><article class="panel connected-devices"><div class="panel-header"><div class="panel-title-wrap"><h2>${child ? 'Responsável vinculado' : 'Aparelhos conectados'}</h2><p>${child ? 'Quem recebe seus compartilhamentos.' : 'Pessoas que aceitaram participar.'}</p></div><span class="live-chip">${state.connected ? '2 ativos' : '1 ativo'}</span></div><div class="device-list"><div class="device-row"><div class="avatar">AM</div><div class="device-copy"><strong>Ana Martins</strong><span>${child ? 'Responsável · localização permitida' : 'Administradora · este aparelho'}</span></div><span class="member-status">ativo</span><button class="device-menu" data-action="device-menu" type="button" aria-label="Opções do dispositivo">${icon('more')}</button></div><div class="device-row"><div class="avatar lia">LM</div><div class="device-copy"><strong>Lia Martins</strong><span>${child ? 'Este aparelho · compartilhamento ativo' : 'Convidada · localização e SOS'}</span></div><span class="member-status">ativo</span><button class="device-menu" data-action="device-menu" type="button" aria-label="Opções do dispositivo">${icon('more')}</button></div></div></article></section></div>`;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">VÍNCULO COM ACEITE</div><h1>${child ? 'Conectar responsável' : 'Conectar aparelho'}</h1><p>${child ? 'Quando receber um convite, digite o código aqui.' : 'Conecte um aparelho somente depois que a outra pessoa aceitar.'}</p></div><span class="soft-chip">${icon('lock')} Proteção por consentimento</span></section><section class="connection-layout"><article class="panel connection-card"><div class="stepper"><div class="step active"><span class="step-number">1</span><span>${child ? 'Receba o código' : 'Envie o convite'}</span></div><div class="step"><span class="step-number">2</span><span>Revise o vínculo</span></div><div class="step"><span class="step-number">3</span><span>Escolha o que compartilhar</span></div></div>${child ? `<label class="connection-form-label" for="pair-code-input">Código recebido</label><div class="input-wrap">${icon('key')}<input id="pair-code-input" class="text-input" maxlength="12" placeholder="Digite o código do convite" autocomplete="off" /></div><p class="form-help">O código será validado pelo serviço de conexão. Nenhum aparelho é vinculado somente por digitar um texto.</p><div class="form-actions"><button class="secondary-button" data-nav="child-settings" type="button">${icon('shieldCheck')} Privacidade</button><button class="primary-button" data-action="connect-code" type="button">${icon('link')} Validar quando disponível</button></div>` : `<div class="empty-connection-intro"><span class="empty-state-icon">${icon('link')}</span><div><strong>Nenhum convite ativo</strong><p>A geração de convites será habilitada quando o serviço seguro de conexão estiver configurado.</p></div></div><div class="form-actions"><button class="secondary-button" data-nav="settings" type="button">${icon('settings')} Ver permissões</button><button class="primary-button" data-action="connection-info" type="button">${icon('info')} Como funciona</button></div>`}<div class="consent-note">${icon('shieldCheck')}<span>Nada começa escondido: cada participante verá quais dados serão compartilhados, poderá aceitar ou recusar e poderá pausar o vínculo depois.</span></div></article><article class="panel connected-devices"><div class="panel-header"><div class="panel-title-wrap"><h2>Participantes vinculados</h2><p>Sem dados preenchidos neste aparelho.</p></div><span class="neutral-chip">0 ativos</span></div><div class="empty-sheet-state device-empty-state"><span class="empty-state-icon">${icon('users')}</span><strong>Nenhum aparelho conectado</strong><p>Os aparelhos só aparecerão após uma confirmação real dos dois lados.</p><button class="secondary-button" data-nav="settings" type="button">${icon('shieldCheck')} Revisar privacidade</button></div></article></section></div>`;
 }
-
 function renderAudioPage() {
-  const requestStatus = state.audioRequest ? 'Aguardando aceite de Lia' : 'Nenhum pedido em aberto';
-  const statusDetail = state.audioRequest ? 'O pedido foi enviado e ficará visível no outro aparelho.' : 'Solicite um áudio curto, somente quando necessário.';
-  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">COMUNICAÇÃO CLARA</div><h1>Check-in de áudio</h1><p>Uma forma de se comunicar — nunca de ouvir alguém sem que saiba.</p></div><span class="soft-chip">${icon('mic')} Consentimento sempre</span></section><section class="audio-layout"><article class="audio-hero"><div class="eyebrow">MODO TRANSPARENTE</div><h2>Presença também é poder dizer “sim” ou “agora não”.</h2><p>Envie um pedido para Lia gravar uma mensagem de áudio. O microfone só é ativado depois do aceite explícito e um indicador fica visível durante todo o processo.</p><div class="audio-visual" aria-hidden="true">${Array.from({ length: 31 }, (_, index) => `<span class="audio-bar" style="animation-delay:${(index % 8) * -0.13}s"></span>`).join('')}</div><div class="audio-consent-list"><div class="audio-consent-row">${icon('checkCircle')} Lia recebe uma notificação antes de qualquer gravação.</div><div class="audio-consent-row">${icon('checkCircle')} O pedido pode ser recusado ou encerrado a qualquer momento.</div><div class="audio-consent-row">${icon('checkCircle')} O indicador de áudio permanece visível nos dois aparelhos.</div></div></article><article class="panel audio-side-card"><h3>Solicitar um check-in</h3><p>O pedido será enviado para o aparelho de Lia, com a opção de aceitar, recusar ou responder depois.</p><div class="request-status"><span class="request-status-icon">${icon(state.audioRequest ? 'clock' : 'mic')}</span><div><strong>${requestStatus}</strong><span>${statusDetail}</span></div></div><button class="primary-button" data-action="request-audio" type="button">${icon(state.audioRequest ? 'refresh' : 'send')} ${state.audioRequest ? 'Enviar lembrete' : 'Solicitar áudio'}</button><div class="info-callout">${icon('info')} <span>Para proteger a privacidade, este espaço não inicia escuta contínua nem gravação oculta. O produto usa comunicação ativa e consentida.</span></div></article></section></div>`;
+  const hasDevice = state.connectedDevices.length > 0;
+  const requestStatus = state.audioRequest ? 'Pedido aguardando aceite' : hasDevice ? 'Nenhum pedido em aberto' : 'Nenhum aparelho conectado';
+  const statusDetail = state.audioRequest ? 'O pedido aparecerá de forma visível no outro aparelho.' : hasDevice ? 'Solicite um áudio curto, somente quando necessário.' : 'Conecte um aparelho antes de enviar um pedido.';
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">COMUNICAÇÃO CLARA</div><h1>Check-in de áudio</h1><p>Uma forma de se comunicar — nunca de ouvir alguém sem que saiba.</p></div><span class="soft-chip">${icon('mic')} Consentimento sempre</span></section><section class="audio-layout"><article class="audio-hero"><div class="eyebrow">MODO TRANSPARENTE</div><h2>Presença também é poder dizer “sim” ou “agora não”.</h2><p>Um pedido só poderá ser enviado depois de existir um vínculo aceito. O microfone só será ativado depois do aceite explícito e um indicador ficará visível durante todo o processo.</p><div class="audio-visual" aria-hidden="true">${Array.from({ length: 31 }, (_, index) => `<span class="audio-bar" style="animation-delay:${(index % 8) * -0.13}s"></span>`).join('')}</div><div class="audio-consent-list"><div class="audio-consent-row">${icon('checkCircle')} A pessoa recebe uma notificação antes de qualquer gravação.</div><div class="audio-consent-row">${icon('checkCircle')} O pedido pode ser recusado ou encerrado a qualquer momento.</div><div class="audio-consent-row">${icon('checkCircle')} O indicador de áudio permanece visível nos dois aparelhos.</div></div></article><article class="panel audio-side-card"><h3>Solicitar um check-in</h3><p>Quando houver um vínculo, o pedido será enviado com a opção de aceitar, recusar ou responder depois.</p><div class="request-status"><span class="request-status-icon">${icon(state.audioRequest ? 'clock' : hasDevice ? 'mic' : 'link')}</span><div><strong>${requestStatus}</strong><span>${statusDetail}</span></div></div><button class="primary-button" data-action="request-audio" type="button" ${hasDevice ? '' : 'disabled'}>${icon(hasDevice ? (state.audioRequest ? 'refresh' : 'send') : 'link')} ${hasDevice ? (state.audioRequest ? 'Enviar lembrete' : 'Solicitar áudio') : 'Conectar aparelho primeiro'}</button><div class="info-callout">${icon('info')} <span>Este espaço não inicia escuta contínua nem gravação oculta. O produto usa comunicação ativa e consentida.</span></div></article></section></div>`;
 }
 
 function settingRow({ iconName, tone = '', title, description, setting, on = false }) {
@@ -286,9 +277,9 @@ function settingRow({ iconName, tone = '', title, description, setting, on = fal
 }
 
 function renderSettingsPage(child = false) {
-  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">CONTROLE NA SUA MÃO</div><h1>${child ? 'Minha privacidade' : 'Privacidade e ajustes'}</h1><p>${child ? 'Você escolhe o que compartilhar, quando e com quem.' : 'Permissões visíveis, escolhas simples e nenhum dado escondido.'}</p></div><span class="live-chip">${icon('shieldCheck')} Proteção ativa</span></section><section class="settings-grid"><article class="panel settings-panel"><div class="panel-header"><div class="panel-title-wrap"><h2>${child ? 'O que está compartilhado' : 'Permissões da família'}</h2><p>Alterações aparecem para as pessoas conectadas.</p></div></div>${settingRow({ iconName: 'location', tone: 'mint', title: 'Localização em tempo real', description: 'Compartilhar a posição aproximada e o status da rota atual.', setting: 'liveLocation', on: state.settings.liveLocation })}${settingRow({ iconName: 'bell', tone: 'amber', title: 'Alertas de chegada e saída', description: 'Avisar quando alguém chegar a um local salvo.', setting: 'arrivalAlerts', on: state.settings.arrivalAlerts })}${settingRow({ iconName: 'mic', title: 'Pedidos de áudio', description: 'Permitir que um responsável envie um pedido de check-in de áudio.', setting: 'audioRequests', on: state.settings.audioRequests })}${settingRow({ iconName: 'database', title: 'Histórico de rotas', description: 'Guardar rotas anteriores por até 7 dias para consulta da família.', setting: 'history', on: state.settings.history })}</article><aside class="privacy-score-card"><div class="eyebrow">RESUMO DE TRANSPARÊNCIA</div><h2>Você está no controle.</h2><p>As permissões do vínculo podem ser revisadas a qualquer hora. Todos os participantes recebem aviso quando algo muda.</p><div class="score-ring-wrap"><div class="score-ring"></div><div class="score-ring-copy"><strong>Configuração protegida</strong><span>4 de 4 controles revisados</span></div></div><button class="secondary-button" data-action="privacy-report" type="button">${icon('eye')} Ver resumo do vínculo</button></aside></section><section class="panel" style="margin-top:19px"><div class="panel-header"><div class="panel-title-wrap"><h2>Seus dados, com clareza</h2><p>Esta versão de interface usa informações simuladas para testes.</p></div><span class="neutral-chip">sem dados reais</span></div><div class="setting-row"><span class="setting-icon amber">${icon('trash')}</span><div class="setting-copy"><strong>Apagar histórico de demonstração</strong><p>Remove os eventos simulados deste aparelho. Em produção, a remoção deverá ser confirmada por todos os participantes.</p></div><button class="ghost-button" data-action="clear-demo" type="button">Apagar</button></div></section></div>`;
+  const hasLocation = state.locationPermission === 'granted' && state.userLocation;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">CONTROLE NA SUA MÃO</div><h1>${child ? 'Minha privacidade' : 'Privacidade e ajustes'}</h1><p>${child ? 'Você escolhe o que compartilhar, quando e com quem.' : 'Permissões visíveis, escolhas simples e nenhum dado inventado.'}</p></div><span class="${hasLocation ? 'live-chip' : 'neutral-chip'}">${icon(hasLocation ? 'shieldCheck' : 'info')} ${hasLocation ? 'Localização autorizada' : 'Sem permissões ativas'}</span></section><section class="settings-grid"><article class="panel settings-panel"><div class="panel-header"><div class="panel-title-wrap"><h2>${child ? 'O que está compartilhado' : 'Permissões deste aparelho'}</h2><p>As alterações só terão efeito depois da confirmação do sistema e dos participantes.</p></div></div>${settingRow({ iconName: 'location', tone: 'mint', title: 'Localização em tempo real', description: 'Permitir que este aparelho compartilhe a posição aproximada após um vínculo aceito.', setting: 'liveLocation', on: state.settings.liveLocation })}${settingRow({ iconName: 'bell', tone: 'amber', title: 'Alertas de chegada e saída', description: 'Receber avisos de locais salvos quando houver um vínculo ativo.', setting: 'arrivalAlerts', on: state.settings.arrivalAlerts })}${settingRow({ iconName: 'mic', title: 'Pedidos de áudio', description: 'Permitir pedidos de check-in de áudio, sempre com aceite antes do microfone.', setting: 'audioRequests', on: state.settings.audioRequests })}${settingRow({ iconName: 'database', title: 'Histórico de rotas', description: 'Guardar rotas anteriores somente se você habilitar esta opção.', setting: 'history', on: state.settings.history })}</article><aside class="privacy-score-card"><div class="eyebrow">ESTADO DO VÍNCULO</div><h2>Nenhum vínculo ativo.</h2><p>Quando houver uma conexão aceita, você verá aqui quem participa e quais permissões estão realmente ativas.</p><div class="privacy-status-list"><div>${icon('link')}<span>0 aparelhos conectados</span></div><div>${icon('location')}<span>${hasLocation ? 'Localização deste aparelho autorizada' : 'Localização aguardando permissão'}</span></div><div>${icon('mic')}<span>Áudio desativado até existir aceite</span></div></div><button class="secondary-button" data-nav="connection" type="button">${icon('plus')} Conectar aparelho</button></aside></section><section class="panel data-empty-panel" style="margin-top:19px"><div class="panel-header"><div class="panel-title-wrap"><h2>Dados armazenados neste aparelho</h2><p>Nenhum histórico ou evento compartilhado foi carregado.</p></div><span class="neutral-chip">vazio</span></div><div class="empty-sheet-state"><span class="empty-state-icon">${icon('database')}</span><strong>Nenhum dado para apagar</strong><p>Quando o armazenamento de histórico for ativado, você poderá revisar e apagar os dados por aqui.</p></div></section></div>`;
 }
-
 function renderCalculatorCard() {
   const keys = ['C', '÷', '×', '⌫', '7', '8', '9', '-', '4', '5', '6', '+', '1', '2', '3', '=', '0', '.', '(', ')'];
   return `<article class="panel calculator-card"><div class="panel-header"><div class="panel-title-wrap"><h2>Calculadora</h2><p>Uma ferramenta útil no dia a dia.</p></div>${icon('calculator')}</div><div class="calc-display" aria-live="polite">${state.calculator.display}</div><div class="calc-keys">${keys.map((key) => `<button class="calc-key ${['÷', '×', '-', '+', '='].includes(key) ? 'operator' : ''} ${key === '=' ? 'equals' : ''}" data-action="calc-key" data-key="${key}" type="button">${key}</button>`).join('')}</div></article>`;
@@ -305,17 +296,18 @@ function renderQuizPage() {
 }
 
 function renderChildHome() {
-  return `<div class="dashboard child-dashboard"><section class="child-welcome"><div class="child-welcome-copy"><div class="eyebrow">SEU ESPAÇO · TUDO VISÍVEL</div><h1>Oi, Lia <span>✦</span></h1><p>Você está conectada com Ana. Seu aparelho está seguro.</p></div><div class="avatar lia">LM</div></section><section class="child-grid"><article class="sos-card"><div class="sos-copy"><div class="eyebrow">PRECISA DE AJUDA?</div><h2>Estamos com você.</h2><p>Toque no botão SOS para avisar Ana e compartilhar sua localização atual.</p></div><button class="sos-button" data-action="sos" type="button" aria-label="Enviar alerta SOS">SOS</button></article><article class="panel location-card"><div class="location-card-header"><h2>Minha localização</h2>${icon('location')}</div><div class="location-status"><span class="status-dot"></span> Compartilhando com Ana</div><p>Última atualização: agora · você pode pausar quando quiser.</p><button class="text-link" data-action="toggle-location" type="button">${state.locationSharing ? 'Pausar compartilhamento' : 'Retomar compartilhamento'} ${icon(state.locationSharing ? 'pause' : 'play')}</button></article><article class="panel child-route-card child-full-width"><div class="child-route-copy"><h2>Rota de hoje</h2><p>Casa → Escola Horizonte</p><div class="route-progress"><span class="route-progress-pin">${icon('home')}</span><div class="route-progress-track"></div><span class="route-progress-pin">${icon('navigation')}</span></div><div class="route-times"><span>08:12 <strong>saída</strong></span><span>chegada prevista 08:34</span></div></div><button class="secondary-button" data-action="view-child-route" type="button">${icon('map')} Ver minha rota</button></article><article class="transparency-card"><span class="soft-chip">${icon('mic')} COM ACEITE</span><h2>Check-in de áudio</h2><p>Ana pode enviar um pedido. Você decide se quer responder — nada é gravado escondido.</p><button class="secondary-button" data-action="audio-info" type="button">${icon('info')} Como funciona</button></article>${renderCalculatorCard()}</section></div>`;
+  const hasLocation = state.locationPermission === 'granted' && state.userLocation;
+  const hasDevice = state.connectedDevices.length > 0;
+  return `<div class="dashboard child-dashboard"><section class="child-welcome"><div class="child-welcome-copy"><div class="eyebrow">SEU ESPAÇO · TUDO VISÍVEL</div><h1>Olá <span>✦</span></h1><p>Ferramentas para o dia a dia e uma área clara de proteção.</p></div><div class="avatar lia">EU</div></section><section class="child-grid"><article class="sos-card"><div class="sos-copy"><div class="eyebrow">EMERGÊNCIA</div><h2>SOS</h2><p>${hasDevice ? 'Use somente quando precisar de ajuda. Os participantes autorizados serão avisados.' : 'Conecte um responsável para ativar o envio de alertas.'}</p></div><button class="sos-button" data-action="sos" type="button" aria-label="Enviar alerta SOS">SOS</button></article><article class="panel location-card"><div class="location-card-header"><h2>Minha localização</h2>${icon('location')}</div><div class="location-status ${state.locationSharing ? '' : 'paused'}"><span class="status-dot"></span> ${state.locationSharing ? 'Compartilhamento desativado' : 'Não compartilhando'}</div><p>${hasLocation ? `Precisão aproximada: ${state.locationAccuracy || '—'} m.` : 'Nenhuma permissão de localização foi concedida neste aparelho.'}</p><button class="text-link" data-action="${hasLocation ? 'toggle-location' : 'request-location'}" type="button">${hasLocation ? (state.locationSharing ? 'Pausar compartilhamento' : 'Compartilhar localização') : 'Ativar localização'} ${icon(hasLocation && state.locationSharing ? 'pause' : 'locate')}</button></article><article class="panel child-route-card child-full-width"><div class="child-route-copy"><h2>Rotas compartilhadas</h2><p>${hasDevice ? 'Nenhuma rota recebida ainda.' : 'Conecte um responsável para receber uma rota.'}</p><div class="empty-route-inline">${icon('route')}<span>Aqui aparecerá somente uma rota realmente compartilhada.</span></div></div><button class="secondary-button" data-action="${hasDevice ? 'view-child-route' : 'go-connection'}" type="button">${icon(hasDevice ? 'map' : 'link')} ${hasDevice ? 'Ver rotas' : 'Conectar'}</button></article><article class="transparency-card"><span class="soft-chip">${icon('shieldCheck')} PROTEÇÃO VISÍVEL</span><h2>Privacidade primeiro</h2><p>Você pode revisar permissões, ver o estado do vínculo e pausar qualquer compartilhamento.</p><button class="secondary-button" data-nav="child-settings" type="button">${icon('settings')} Revisar permissões</button></article>${renderCalculatorCard()}</section></div>`;
 }
-
 function renderChildCalculatorPage() {
   return `<div class="dashboard child-dashboard"><section class="page-heading"><div><div class="eyebrow">FERRAMENTA DO DIA A DIA</div><h1>Calculadora</h1><p>Faça contas rápidas quando precisar.</p></div><button class="secondary-button" data-nav="child-home" type="button">${icon('arrowRight')} Voltar ao meu espaço</button></section><section style="max-width:430px">${renderCalculatorCard()}</section></div>`;
 }
 
 function renderChildRoutePage() {
-  return `<div class="dashboard child-dashboard"><section class="page-heading"><div><div class="eyebrow">LOCALIZAÇÃO VISÍVEL PARA VOCÊ</div><h1>Minha rota</h1><p>Confira o trajeto compartilhado com Ana e o horário previsto.</p></div><button class="secondary-button" data-nav="child-home" type="button">${icon('arrowRight')} Voltar ao meu espaço</button></section><section class="inner-grid"><article class="panel map-panel large-map"><div class="panel-header"><div class="panel-title-wrap"><h2>Casa → Escola Horizonte</h2><p>Rota de hoje · saída às 08:12</p></div><span class="live-chip"><span class="status-dot"></span> VISÍVEL</span></div>${mapMarkup(true)}<div class="map-footer"><div class="map-footer-left">${icon('location')}<span>Seu compartilhamento</span><strong>ativo</strong></div><button class="map-footer-right text-link" data-action="toggle-location" type="button">${state.locationSharing ? 'Pausar localização' : 'Retomar localização'} ${icon('chevronRight')}</button></div></article><aside class="panel route-summary"><div class="route-summary-header"><div><h2>Seu trajeto</h2><p>Você está em movimento</p></div><span class="route-distance">2,4 km</span></div><div class="route-points"><div class="route-point"><strong>Casa Martins</strong><span>${icon('home')} Saída registrada às 08:12</span></div><div class="route-point"><strong>Sua localização</strong><span>${icon('navigation')} Atualização aproximada · agora</span></div><div class="route-point"><strong>Escola Horizonte</strong><span>${icon('location')} Chegada prevista às 08:34</span></div></div><div class="consent-note">${icon('eye')}<span>Ana vê esta mesma rota. Você pode pausar o compartilhamento na tela anterior.</span></div></aside></section></div>`;
+  const hasLocation = state.locationPermission === 'granted' && state.userLocation;
+  return `<div class="dashboard child-dashboard"><section class="page-heading"><div><div class="eyebrow">LOCALIZAÇÃO VISÍVEL PARA VOCÊ</div><h1>Minhas rotas</h1><p>Você verá aqui somente os trajetos que forem compartilhados com você.</p></div><button class="secondary-button" data-nav="child-home" type="button">${icon('arrowRight')} Voltar ao meu espaço</button></section><section class="inner-grid"><article class="panel map-panel large-map"><div class="panel-header"><div class="panel-title-wrap"><h2>Mapa ao vivo</h2><p>${hasLocation ? 'Sua localização está disponível neste aparelho.' : 'Nenhuma localização autorizada.'}</p></div><span class="neutral-chip">sem rota</span></div>${realMapMarkup()}<div class="map-footer"><div class="map-footer-left">${icon(hasLocation ? 'location' : 'info')}<span>Precisão</span><strong>${hasLocation ? `${state.locationAccuracy || '—'} m` : 'não disponível'}</strong></div><button class="map-footer-right text-link" data-action="${hasLocation ? 'toggle-location' : 'request-location'}" type="button">${hasLocation ? 'Pausar localização' : 'Permitir localização'} ${icon('chevronRight')}</button></div></article><aside class="panel route-summary"><div class="route-summary-header"><div><h2>Nenhuma rota recebida</h2><p>Sem dados compartilhados</p></div><span class="route-distance">0 rotas</span></div><div class="empty-sheet-state"><span class="empty-state-icon">${icon('route')}</span><strong>Seu trajeto aparecerá aqui</strong><p>Quando alguém compartilhar uma rota com você, ela será exibida com clareza e poderá ser pausada a qualquer momento.</p><button class="secondary-button" data-nav="child-settings" type="button">${icon('shieldCheck')} Privacidade</button></div></aside></section></div>`;
 }
-
 function renderCurrentScreen() {
   if (state.mode === 'child') {
     if (state.screen === 'child-home') return renderChildHome();
@@ -336,14 +328,6 @@ function renderCurrentScreen() {
   return renderAdminOverview();
 }
 
-const demoRoute = [
-  [-16.6869, -49.2648],
-  [-16.6828, -49.2581],
-  [-16.6784, -49.2517],
-  [-16.6727, -49.2452],
-  [-16.6674, -49.2389],
-];
-
 function destroyRealMap() {
   if (activeMap) {
     activeMap.remove();
@@ -355,51 +339,61 @@ function destroyRealMap() {
 function setupRealMap() {
   const container = document.querySelector('[data-real-map]');
   if (!container) return;
-  const routeBounds = L.latLngBounds(demoRoute);
   const map = L.map(container, {
     zoomControl: false,
     attributionControl: true,
     preferCanvas: true,
-  });
+  }).setView([0, 0], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap',
   }).addTo(map);
-  L.polyline(demoRoute, {
-    color: '#45cfb2',
-    weight: 6,
-    opacity: 0.96,
-    lineCap: 'round',
-    lineJoin: 'round',
-  }).addTo(map);
-  L.polyline(demoRoute, {
-    color: '#ffffff',
-    weight: 2,
-    opacity: 0.75,
-    dashArray: '5 8',
-    lineCap: 'round',
-  }).addTo(map);
-  L.marker(demoRoute[3], {
-    icon: L.divIcon({
-      className: 'family-leaflet-marker',
-      html: '<span><b>LM</b></span>',
-      iconSize: [46, 46],
-      iconAnchor: [23, 23],
-    }),
-  }).addTo(map);
-  L.circleMarker(demoRoute[0], {
-    radius: 9,
-    color: '#ffffff',
-    weight: 4,
-    fillColor: '#159f87',
-    fillOpacity: 1,
-  }).addTo(map);
-  map.fitBounds(routeBounds, { paddingTopLeft: [24, 100], paddingBottomRight: [24, 230] });
   activeMap = map;
-  activeRouteBounds = routeBounds;
+  activeRouteBounds = null;
+
+  if (state.userLocation) {
+    const point = state.userLocation;
+    const bounds = L.latLngBounds([point]);
+    L.circleMarker(point, {
+      radius: 9,
+      color: '#ffffff',
+      weight: 4,
+      fillColor: '#159f87',
+      fillOpacity: 1,
+    }).addTo(map);
+    map.setView(point, 15);
+    activeRouteBounds = bounds;
+  }
   window.setTimeout(() => map.invalidateSize(), 120);
 }
 
+async function requestLocation() {
+  try {
+    const permissions = await Geolocation.requestPermissions();
+    if (permissions.location !== 'granted') {
+      state.locationPermission = 'denied';
+      state.locationSharing = false;
+      state.settings.liveLocation = false;
+      renderApp();
+      showToast('A localização não foi autorizada. Você pode tentar novamente em Privacidade.', 'warning');
+      return;
+    }
+    const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 15000 });
+    state.locationPermission = 'granted';
+    state.userLocation = [position.coords.latitude, position.coords.longitude];
+    state.locationAccuracy = Math.round(position.coords.accuracy);
+    state.locationSharing = true;
+    state.settings.liveLocation = true;
+    renderApp();
+    showToast('Localização ativada neste aparelho.');
+  } catch {
+    state.locationPermission = 'denied';
+    state.locationSharing = false;
+    state.settings.liveLocation = false;
+    renderApp();
+    showToast('Não foi possível obter sua localização agora.', 'warning');
+  }
+}
 function setupSheetGestures() {
   const handle = document.querySelector('.sheet-handle');
   if (!handle) return;
@@ -459,10 +453,19 @@ function closeModal() {
 }
 
 function openSosModal() {
+  if (!state.connectedDevices.length) {
+    openModal({
+      title: 'SOS ainda não configurado',
+      description: 'Conecte um responsável antes de usar este recurso.',
+      body: `<div class="modal-summary">${icon('info')}<span>O botão SOS só poderá enviar um alerta depois de existir um vínculo aceito e uma permissão de localização ativa.</span></div>`,
+      actions: `<button class="secondary-button" data-action="close-modal" type="button">Fechar</button><button class="primary-button" data-action="go-connection" type="button">${icon('link')} Conectar aparelho</button>`,
+    });
+    return;
+  }
   openModal({
     title: 'Enviar alerta SOS?',
-    description: 'Ana receberá um aviso destacado e sua localização atual será compartilhada.',
-    body: `<div class="modal-summary">${icon('shieldCheck')}<span>O alerta fica visível no seu aparelho e pode ser cancelado nos próximos segundos se for um toque acidental.</span></div>`,
+    description: 'Os participantes autorizados receberão um aviso destacado.',
+    body: `<div class="modal-summary">${icon('shieldCheck')}<span>O alerta será visível no seu aparelho e poderá ser cancelado se for um toque acidental.</span></div>`,
     actions: `<button class="secondary-button" data-action="close-modal" type="button">Cancelar</button><button class="danger-button" data-action="confirm-sos" type="button">${icon('alert')} Confirmar SOS</button>`,
   });
 }
@@ -471,7 +474,7 @@ function openAudioInfoModal() {
   openModal({
     title: 'Como funciona o áudio',
     description: 'Comunicação ativa, visível e com consentimento.',
-    body: `<div class="modal-summary">${icon('mic')}<span>Quando Ana pedir um check-in, você verá uma notificação. Só depois de tocar em “Aceitar” o microfone poderá gravar uma mensagem curta. Você também pode recusar ou encerrar a qualquer momento.</span></div><div class="consent-note">${icon('eye')}<span>Um indicador de áudio permanece visível enquanto o microfone estiver ativo. O app não oferece escuta contínua ou oculta.</span></div>`,
+    body: `<div class="modal-summary">${icon('mic')}<span>Quando um responsável pedir um check-in, você verá uma notificação. Só depois de tocar em “Aceitar” o microfone poderá gravar uma mensagem curta. Você também pode recusar ou encerrar a qualquer momento.</span></div><div class="consent-note">${icon('eye')}<span>Um indicador de áudio permanece visível enquanto o microfone estiver ativo. O app não oferece escuta contínua ou oculta.</span></div>`,
     actions: `<button class="primary-button" data-action="close-modal" type="button">Entendi</button>`,
   });
 }
@@ -595,14 +598,15 @@ function handleClick(event) {
     return;
   }
 
-  if (action === 'copy-code') {
-    if (navigator.clipboard) navigator.clipboard.writeText('PL-4821').catch(() => {});
-    showToast('Código PL-4821 copiado para a área de transferência.');
+  if (action === 'go-connection') {
+    closeModal();
+    state.screen = 'connection';
+    renderApp();
     return;
   }
 
-  if (action === 'generate-code') {
-    showToast('Um novo código temporário foi gerado.', 'success');
+  if (action === 'copy-code' || action === 'generate-code') {
+    showToast('A geração de convites será ativada quando o serviço seguro de conexão estiver configurado.', 'warning');
     return;
   }
 
@@ -610,33 +614,58 @@ function handleClick(event) {
     const input = document.querySelector('#pair-code-input');
     if (!input || input.value.trim().length < 4) {
       input?.focus();
-      showToast('Digite um código válido para continuar.', 'warning');
+      showToast('Digite o código recebido para continuar.', 'warning');
       return;
     }
-    state.connected = true;
-    renderApp();
-    showToast('Código recebido. Revise as permissões antes de confirmar o vínculo.');
+    showToast('O código foi recebido. A validação será feita pelo serviço seguro de conexão.', 'warning');
+    return;
+  }
+
+  if (action === 'connection-info') {
+    openModal({
+      title: 'Como o vínculo funcionará',
+      description: 'Conexão explícita entre dois aparelhos.',
+      body: `<div class="modal-summary">${icon('link')}<span>Um convite será criado no servidor, a outra pessoa verá as permissões e os dois aparelhos precisarão confirmar. Nenhuma localização ou áudio será compartilhado antes desse aceite.</span></div>`,
+      actions: `<button class="primary-button" data-action="close-modal" type="button">Entendi</button>`,
+    });
     return;
   }
 
   if (action === 'request-audio') {
+    if (!state.connectedDevices.length) {
+      showToast('Conecte um aparelho antes de solicitar um check-in.', 'warning');
+      return;
+    }
     state.audioRequest = true;
     renderApp();
-    showToast('Pedido enviado. Lia verá a solicitação no outro aparelho.');
+    showToast('Pedido preparado para o serviço de comunicação consentida.');
+    return;
+  }
+
+  if (action === 'request-location') {
+    requestLocation();
     return;
   }
 
   if (action === 'toggle-location') {
-    state.locationSharing = !state.locationSharing;
-    state.settings.liveLocation = state.locationSharing;
+    if (!state.locationSharing) {
+      requestLocation();
+      return;
+    }
+    state.locationSharing = false;
+    state.settings.liveLocation = false;
     renderApp();
-    showToast(state.locationSharing ? 'Localização compartilhada novamente com Ana.' : 'Localização pausada. O outro aparelho foi avisado.', state.locationSharing ? 'success' : 'warning');
+    showToast('Localização pausada neste aparelho.', 'warning');
     return;
   }
 
   if (action === 'toggle-setting') {
     const setting = target.dataset.setting;
     if (setting && Object.prototype.hasOwnProperty.call(state.settings, setting)) {
+      if (setting === 'liveLocation' && !state.settings.liveLocation) {
+        requestLocation();
+        return;
+      }
       state.settings[setting] = !state.settings[setting];
       if (setting === 'liveLocation') state.locationSharing = state.settings[setting];
       renderApp();
@@ -652,7 +681,7 @@ function handleClick(event) {
 
   if (action === 'confirm-sos') {
     closeModal();
-    showToast('SOS enviado para Ana. Localização compartilhada agora.', 'warning');
+    showToast('SOS preparado para envio aos participantes autorizados.', 'warning');
     return;
   }
 

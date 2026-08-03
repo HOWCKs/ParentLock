@@ -20,10 +20,11 @@ A ferramenta não disfarça coleta de localização ou áudio como calculadora. 
 
 Nesta versão:
 
-- o mapa, a localização, o SOS e o áudio usam dados simulados;
+- o mapa usa tiles reais do OpenStreetMap;
+- a localização só aparece depois da permissão explícita do sistema;
+- sem vínculo ativo, rotas, alertas e participantes aparecem vazios;
 - o áudio é somente um pedido de check-in com aceite explícito;
 - não existe escuta oculta ou contínua;
-- nenhuma localização, gravação ou dado pessoal real é coletado.
 
 ## Executar no Termux
 
@@ -95,4 +96,4 @@ bash scripts/termux-apk.sh admin
 bash scripts/termux-apk.sh companion
 ```
 
-Depois do feedback visual, a próxima etapa será substituir os dados simulados por autenticação, backend, permissões nativas explícitas e mapa real.
+A próxima etapa é conectar autenticação, backend, permissões nativas explícitas, sincronização de participantes e o serviço de alertas.
