@@ -1,5 +1,7 @@
 import L from 'leaflet';
+import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import 'leaflet/dist/leaflet.css';
 import './styles.css';
 
@@ -65,14 +67,18 @@ const APP_MODE = import.meta.env.VITE_APP_MODE || 'demo';
 const isCompanionBuild = APP_MODE === 'companion';
 const isDemoBuild = APP_MODE === 'demo';
 const savedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem('parentlock-theme') : null;
+const onboardingKey = `parentlock-onboarding-${APP_MODE}`;
+const savedOnboarding = typeof localStorage !== 'undefined' ? localStorage.getItem(onboardingKey) === 'complete' : false;
 
 const state = {
   mode: isCompanionBuild ? 'child' : 'admin',
   screen: isCompanionBuild ? 'child-home' : 'overview',
   theme: savedTheme === 'amoled' ? 'amoled' : 'light',
+  onboardingComplete: savedOnboarding,
   sheetExpanded: false,
   locationSharing: false,
   locationPermission: 'prompt',
+  notificationPermission: 'prompt',
   userLocation: null,
   locationAccuracy: null,
   audioRequest: false,
@@ -215,6 +221,81 @@ function renderMobileNav() {
 
 function realMapMarkup() {
   return `<div class="real-map-canvas" data-real-map aria-label="Mapa real da família com rota compartilhada"></div>`;
+}
+
+function permissionsReady() {
+  const notificationsAllowedInPreview = !Capacitor.isNativePlatform() && state.notificationPermission === 'unavailable';
+  return state.locationPermission === 'granted' && (state.notificationPermission === 'granted' || notificationsAllowedInPreview);
+}
+
+async function refreshNativePermissions() {
+  let changed = false;
+  try {
+    const location = await Geolocation.checkPermissions();
+    if (state.locationPermission !== location.location) {
+      state.locationPermission = location.location;
+      changed = true;
+    }
+  } catch {
+    // The permission row remains available for the native build.
+  }
+  try {
+    const notifications = await LocalNotifications.checkPermissions();
+    if (state.notificationPermission !== notifications.display) {
+      state.notificationPermission = notifications.display;
+      changed = true;
+    }
+  } catch {
+    if (typeof Notification === 'undefined' && state.notificationPermission !== 'unavailable') {
+      state.notificationPermission = 'unavailable';
+      changed = true;
+    } else if (typeof Notification !== 'undefined' && state.notificationPermission !== Notification.permission) {
+      state.notificationPermission = Notification.permission;
+      changed = true;
+    }
+  }
+  if (changed) renderApp();
+}
+
+async function requestNotifications() {
+  try {
+    const permissions = await LocalNotifications.requestPermissions();
+    state.notificationPermission = permissions.display;
+  } catch {
+    if (typeof Notification !== 'undefined') {
+      state.notificationPermission = await Notification.requestPermission();
+    } else {
+      state.notificationPermission = 'unavailable';
+    }
+  }
+  renderApp();
+}
+
+function finishOnboarding() {
+  if (!permissionsReady()) {
+    showToast('Ative as permissões necessárias para continuar.', 'warning');
+    return;
+  }
+  state.onboardingComplete = true;
+  try {
+    localStorage.setItem(onboardingKey, 'complete');
+  } catch {
+    // A sessão continua funcionando sem persistência local.
+  }
+  state.screen = isCompanionBuild ? 'connection' : 'overview';
+  renderApp();
+}
+
+function permissionRow({ iconName, title, description, status, action, actionLabel }) {
+  const active = status === 'granted';
+  const unavailable = status === 'unavailable';
+  return `<div class="permission-row"><span class="permission-icon ${active ? 'active' : ''}">${icon(iconName)}</span><div class="permission-copy"><strong>${title}</strong><p>${description}</p></div><div class="permission-action"><span class="permission-status ${active ? 'active' : unavailable ? 'soft' : ''}">${active ? 'Ativada' : unavailable ? 'No Android' : status === 'denied' ? 'Bloqueada' : 'Pendente'}</span>${!active && !unavailable ? `<button class="ghost-button" data-action="${action}" type="button">${actionLabel}</button>` : ''}</div></div>`;
+}
+
+function renderOnboarding() {
+  const locationReady = state.locationPermission === 'granted';
+  const notificationsReady = state.notificationPermission === 'granted';
+  return `<div class="onboarding-screen"><div class="onboarding-card"><div class="onboarding-brand"><span class="brand-mark">${icon('shield')}</span><div><strong>ParentLock</strong><small>${isCompanionBuild ? 'Aplicativo acompanhado' : 'Aplicativo administrador'}</small></div></div><div class="onboarding-eyebrow">PRIMEIRO ACESSO</div><h1>Vamos preparar seu aparelho.</h1><p class="onboarding-lead">Antes de entrar, revise e autorize apenas o que o aplicativo precisa para funcionar. Você poderá alterar tudo depois.</p><div class="permission-list">${permissionRow({ iconName: 'location', title: 'Localização', description: 'Usada somente quando você autorizar o compartilhamento ou pedir para ver sua posição no mapa.', status: state.locationPermission, action: 'request-location', actionLabel: locationReady ? 'Ativada' : 'Ativar' })}${permissionRow({ iconName: 'bell', title: 'Notificações', description: 'Necessárias para avisos de conexão, SOS e mudanças autorizadas.', status: state.notificationPermission, action: 'request-notifications', actionLabel: notificationsReady ? 'Ativadas' : 'Ativar' })}<div class="permission-row permission-row-info"><span class="permission-icon soft">${icon('mic')}</span><div class="permission-copy"><strong>Microfone</strong><p>Não é solicitado agora. Um check-in de áudio só poderá ser iniciado depois de um pedido visível e do seu aceite.</p></div><span class="permission-status soft">Não solicitado</span></div></div><div class="onboarding-note">${icon('shieldCheck')}<span>Você não precisa conceder acesso a contatos, fotos ou microfone para entrar. O vínculo com outro aparelho será uma etapa separada.</span></div><button class="primary-button onboarding-continue" data-action="finish-onboarding" type="button" ${permissionsReady() ? '' : 'disabled'}>${icon('arrowRight')} ${permissionsReady() ? 'Entrar no ParentLock' : 'Ative as permissões para continuar'}</button><button class="theme-toggle onboarding-theme" data-action="toggle-theme" type="button">${icon(state.theme === 'amoled' ? 'sun' : 'moon')} Tema ${state.theme === 'amoled' ? 'AMOLED' : 'claro'}</button></div></div>`;
 }
 
 function metricCard({ iconName, label, value, foot, trend, tone = '' }) {
@@ -420,6 +501,10 @@ function renderApp() {
   destroyRealMap();
   document.documentElement.dataset.theme = state.theme;
   const app = document.querySelector('#app');
+  if (!state.onboardingComplete) {
+    app.innerHTML = renderOnboarding();
+    return;
+  }
   const immersiveMap = state.mode === 'admin' && state.screen === 'overview';
   app.innerHTML = `<div class="app-shell">${renderSidebar()}<main class="main-content">${immersiveMap ? '' : renderTopbar()}${renderCurrentScreen()}</main></div>${immersiveMap ? '' : renderMobileNav()}`;
   setupRealMap();
@@ -567,6 +652,16 @@ function handleClick(event) {
 
   if (action === 'mobile-menu') {
     showToast('Use o seletor de perfil para alternar entre os dois aplicativos.', 'warning');
+    return;
+  }
+
+  if (action === 'request-notifications') {
+    requestNotifications();
+    return;
+  }
+
+  if (action === 'finish-onboarding') {
+    finishOnboarding();
     return;
   }
 
@@ -788,16 +883,12 @@ function handleClick(event) {
     openModal({
       title: 'Resumo do vínculo',
       description: 'O que está visível para cada pessoa hoje.',
-      body: `<div class="request-status"><span class="request-status-icon" style="color:var(--mint-dark);background:var(--mint-pale)">${icon('location')}</span><div><strong>Localização</strong><span>Ativa · atualização aproximada a cada minuto</span></div></div><div class="request-status"><span class="request-status-icon" style="color:var(--blue);background:var(--blue-pale)">${icon('mic')}</span><div><strong>Áudio</strong><span>Somente por pedido e aceite explícito</span></div></div><div class="request-status"><span class="request-status-icon">${icon('database')}</span><div><strong>Histórico</strong><span>${state.settings.history ? 'Ativo por 7 dias' : 'Desativado'}</span></div></div>`,
+      body: `<div class="request-status"><span class="request-status-icon" style="color:var(--mint-dark);background:var(--mint-pale)">${icon('location')}</span><div><strong>Localização</strong><span>${state.locationPermission === 'granted' ? 'Autorizada neste aparelho' : 'Ainda não autorizada'}</span></div></div><div class="request-status"><span class="request-status-icon" style="color:var(--blue);background:var(--blue-pale)">${icon('mic')}</span><div><strong>Áudio</strong><span>${state.settings.audioRequests ? 'Pedidos permitidos, sempre com aceite' : 'Desativado'}</span></div></div><div class="request-status"><span class="request-status-icon">${icon('database')}</span><div><strong>Histórico</strong><span>${state.settings.history ? 'Permitido, sem registros ainda' : 'Desativado'}</span></div></div>`,
       actions: `<button class="primary-button" data-action="close-modal" type="button">Fechar resumo</button>`,
     });
     return;
   }
 
-  if (action === 'clear-demo') {
-    showToast('Histórico de demonstração apagado neste aparelho.', 'warning');
-    return;
-  }
 }
 
 function handleKeydown(event) {
@@ -807,3 +898,4 @@ function handleKeydown(event) {
 document.addEventListener('click', handleClick);
 document.addEventListener('keydown', handleKeydown);
 renderApp();
+refreshNativePermissions();
