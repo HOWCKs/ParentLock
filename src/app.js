@@ -1,7 +1,9 @@
 import L from 'leaflet';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { redeemPairingCode, normalizePairingCode } from './services/pairing';
+import { supabaseConfigured } from './services/supabase';
 import 'leaflet/dist/leaflet.css';
 import './styles.css';
 
@@ -66,6 +68,7 @@ function icon(name, className = '') {
 const APP_MODE = import.meta.env.VITE_APP_MODE || 'demo';
 const isCompanionBuild = APP_MODE === 'companion';
 const isDemoBuild = APP_MODE === 'demo';
+const NativeSettings = registerPlugin('Settings');
 const savedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem('parentlock-theme') : null;
 const onboardingKey = `parentlock-onboarding-${APP_MODE}`;
 const savedOnboarding = typeof localStorage !== 'undefined' ? localStorage.getItem(onboardingKey) === 'complete' : false;
@@ -344,7 +347,7 @@ function renderAlertsPage() {
 }
 function renderConnectionPage() {
   const child = state.mode === 'child';
-  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">VÍNCULO COM ACEITE</div><h1>${child ? 'Conectar responsável' : 'Conectar aparelho'}</h1><p>${child ? 'Quando receber um convite, digite o código aqui.' : 'Conecte um aparelho somente depois que a outra pessoa aceitar.'}</p></div><span class="soft-chip">${icon('lock')} Proteção por consentimento</span></section><section class="connection-layout"><article class="panel connection-card"><div class="stepper"><div class="step active"><span class="step-number">1</span><span>${child ? 'Receba o código' : 'Envie o convite'}</span></div><div class="step"><span class="step-number">2</span><span>Revise o vínculo</span></div><div class="step"><span class="step-number">3</span><span>Escolha o que compartilhar</span></div></div>${child ? `<label class="connection-form-label" for="pair-code-input">Código recebido</label><div class="input-wrap">${icon('key')}<input id="pair-code-input" class="text-input" maxlength="12" placeholder="Digite o código do convite" autocomplete="off" /></div><p class="form-help">O código será validado pelo serviço de conexão. Nenhum aparelho é vinculado somente por digitar um texto.</p><div class="form-actions"><button class="secondary-button" data-nav="child-settings" type="button">${icon('shieldCheck')} Privacidade</button><button class="primary-button" data-action="connect-code" type="button">${icon('link')} Validar quando disponível</button></div>` : `<div class="empty-connection-intro"><span class="empty-state-icon">${icon('link')}</span><div><strong>Nenhum convite ativo</strong><p>A geração de convites será habilitada quando o serviço seguro de conexão estiver configurado.</p></div></div><div class="form-actions"><button class="secondary-button" data-nav="settings" type="button">${icon('settings')} Ver permissões</button><button class="primary-button" data-action="connection-info" type="button">${icon('info')} Como funciona</button></div>`}<div class="consent-note">${icon('shieldCheck')}<span>Nada começa escondido: cada participante verá quais dados serão compartilhados, poderá aceitar ou recusar e poderá pausar o vínculo depois.</span></div></article><article class="panel connected-devices"><div class="panel-header"><div class="panel-title-wrap"><h2>Participantes vinculados</h2><p>Sem dados preenchidos neste aparelho.</p></div><span class="neutral-chip">0 ativos</span></div><div class="empty-sheet-state device-empty-state"><span class="empty-state-icon">${icon('users')}</span><strong>Nenhum aparelho conectado</strong><p>Os aparelhos só aparecerão após uma confirmação real dos dois lados.</p><button class="secondary-button" data-nav="settings" type="button">${icon('shieldCheck')} Revisar privacidade</button></div></article></section></div>`;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">VÍNCULO COM ACEITE</div><h1>${child ? 'Conectar responsável' : 'Conectar aparelho'}</h1><p>${child ? 'Quando receber um convite, digite o código aqui.' : 'Conecte um aparelho somente depois que a outra pessoa aceitar.'}</p></div><span class="${supabaseConfigured ? 'live-chip' : 'neutral-chip'}">${icon(supabaseConfigured ? 'checkCircle' : 'lock')} ${supabaseConfigured ? 'Serviço conectado' : 'Serviço de conexão pendente'}</span></section><section class="connection-layout"><article class="panel connection-card"><div class="stepper"><div class="step active"><span class="step-number">1</span><span>${child ? 'Receba o código' : 'Envie o convite'}</span></div><div class="step"><span class="step-number">2</span><span>Revise o vínculo</span></div><div class="step"><span class="step-number">3</span><span>Escolha o que compartilhar</span></div></div>${child ? `<label class="connection-form-label" for="pair-code-input">Código recebido</label><div class="input-wrap">${icon('key')}<input id="pair-code-input" class="text-input" maxlength="12" placeholder="Digite o código do convite" autocomplete="off" /></div><p class="form-help">O código será validado pelo serviço de conexão. Nenhum aparelho é vinculado somente por digitar um texto.</p><div class="form-actions"><button class="secondary-button" data-nav="child-settings" type="button">${icon('shieldCheck')} Privacidade</button><button class="primary-button" data-action="connect-code" type="button">${icon('link')} Validar quando disponível</button></div>` : `<div class="empty-connection-intro"><span class="empty-state-icon">${icon('link')}</span><div><strong>Nenhum convite ativo</strong><p>A geração de convites será habilitada quando o serviço seguro de conexão estiver configurado.</p></div></div><div class="form-actions"><button class="secondary-button" data-nav="settings" type="button">${icon('settings')} Ver permissões</button><button class="primary-button" data-action="connection-info" type="button">${icon('info')} Como funciona</button></div>`}<div class="consent-note">${icon('shieldCheck')}<span>Nada começa escondido: cada participante verá quais dados serão compartilhados, poderá aceitar ou recusar e poderá pausar o vínculo depois.</span></div></article><article class="panel connected-devices"><div class="panel-header"><div class="panel-title-wrap"><h2>Participantes vinculados</h2><p>Sem dados preenchidos neste aparelho.</p></div><span class="neutral-chip">0 ativos</span></div><div class="empty-sheet-state device-empty-state"><span class="empty-state-icon">${icon('users')}</span><strong>Nenhum aparelho conectado</strong><p>Os aparelhos só aparecerão após uma confirmação real dos dois lados.</p><button class="secondary-button" data-nav="settings" type="button">${icon('shieldCheck')} Revisar privacidade</button></div></article></section></div>`;
 }
 function renderAudioPage() {
   const hasDevice = state.connectedDevices.length > 0;
@@ -449,6 +452,15 @@ function setupRealMap() {
 }
 
 async function requestLocation() {
+  if (state.locationPermission === 'denied') {
+    openModal({
+      title: 'Localização bloqueada',
+      description: 'O Android não permitiu o acesso neste momento.',
+      body: `<div class="modal-summary">${icon('location')}<span>Abra as configurações do aplicativo, entre em <strong>Permissões</strong> e permita <strong>Localização</strong>. Depois volte para tentar novamente.</span></div>`,
+      actions: `<button class="secondary-button" data-action="close-modal" type="button">Agora não</button><button class="primary-button" data-action="open-app-settings" type="button">${icon('settings')} Abrir configurações</button>`,
+    });
+    return;
+  }
   try {
     const permissions = await Geolocation.requestPermissions();
     if (permissions.location !== 'granted') {
@@ -622,7 +634,7 @@ function calculatorPress(key) {
   calc.display = calc.expression || '0';
 }
 
-function handleClick(event) {
+async function handleClick(event) {
   const target = event.target.closest('button, [data-action], [data-nav], [data-mode]');
   if (!target) return;
 
@@ -700,6 +712,14 @@ function handleClick(event) {
     return;
   }
 
+  if (action === 'open-app-settings') {
+    closeModal();
+    NativeSettings.openAppSettings().catch(() => {
+      showToast('Abra Configurações → Apps → ParentLock → Permissões → Localização.', 'warning');
+    });
+    return;
+  }
+
   if (action === 'copy-code' || action === 'generate-code') {
     showToast('A geração de convites será ativada quando o serviço seguro de conexão estiver configurado.', 'warning');
     return;
@@ -707,12 +727,26 @@ function handleClick(event) {
 
   if (action === 'connect-code') {
     const input = document.querySelector('#pair-code-input');
-    if (!input || input.value.trim().length < 4) {
+    const code = normalizePairingCode(input?.value);
+    if (code.length < 4) {
       input?.focus();
       showToast('Digite o código recebido para continuar.', 'warning');
       return;
     }
-    showToast('O código foi recebido. A validação será feita pelo serviço seguro de conexão.', 'warning');
+    if (!supabaseConfigured) {
+      showToast('O serviço seguro de conexão ainda não foi configurado. Nenhum vínculo foi criado.', 'warning');
+      return;
+    }
+    showToast('Validando o convite…');
+    const result = await redeemPairingCode(code);
+    if (!result.ok) {
+      showToast('Não foi possível validar este convite. Tente novamente.', 'warning');
+      return;
+    }
+    state.connected = true;
+    state.connectedDevices = [result.data];
+    renderApp();
+    showToast('Convite validado. Revise as permissões antes de continuar.');
     return;
   }
 
@@ -897,5 +931,8 @@ function handleKeydown(event) {
 
 document.addEventListener('click', handleClick);
 document.addEventListener('keydown', handleKeydown);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshNativePermissions();
+});
 renderApp();
 refreshNativePermissions();
