@@ -11,6 +11,13 @@ A próxima compilação gera dois APKs com o mesmo núcleo visual, mas com exper
 
 A ferramenta não disfarça coleta de localização ou áudio como calculadora. Se a pessoa não quiser compartilhar dados, ela pode pausar ou desativar as permissões na área de privacidade; um aplicativo realmente independente de matemática também pode ser compilado sem nenhuma permissão sensível.
 
+## Direção visual atual
+
+- O **mapa real** é a tela principal do administrador, usando tiles do OpenStreetMap, rota destacada e marcador ao vivo.
+- A navegação principal fica em um card flutuante arredondado sobre o mapa.
+- Os detalhes aparecem em uma bottom sheet com alça em formato de cápsula; ela pode ser tocada ou arrastada para expandir e recolher.
+- O tema **AMOLED** pode ser alternado pelo botão de tema, com fundo preto verdadeiro e contraste reduzido para telas OLED.
+
 Nesta versão:
 
 - o mapa, a localização, o SOS e o áudio usam dados simulados;

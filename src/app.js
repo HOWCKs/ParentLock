@@ -1,3 +1,5 @@
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import './styles.css';
 
 const iconPaths = {
@@ -43,6 +45,8 @@ const iconPaths = {
   pause: '<path d="M8 5v14M16 5v14"/>',
   shieldCheck: '<path d="M12 3.4 19 6v5.1c0 4.3-2.8 7.6-7 9.5-4.2-1.9-7-5.2-7-9.5V6l7-2.6Z"/><path d="m8.5 12.2 2.1 2.1 4.8-5"/>',
   star: '<path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/>',
+  sun: '<circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M4.4 4.4l1.4 1.4M18.2 18.2l1.4 1.4M2.5 12h2M19.5 12h2M4.4 19.6l1.4-1.4M18.2 5.8l1.4-1.4"/>',
+  moon: '<path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/>',
   send: '<path d="m21 3-7.2 17-2.6-7.2L4 10.2 21 3Z"/>',
   play: '<path d="m8 5 10 7-10 7V5Z"/>',
   volume: '<path d="M4 10v4h3l4 3V7l-4 3H4ZM15 9.5a4 4 0 0 1 0 5M17.5 7a7.5 7.5 0 0 1 0 10"/>',
@@ -59,10 +63,13 @@ function icon(name, className = '') {
 const APP_MODE = import.meta.env.VITE_APP_MODE || 'demo';
 const isCompanionBuild = APP_MODE === 'companion';
 const isDemoBuild = APP_MODE === 'demo';
+const savedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem('parentlock-theme') : null;
 
 const state = {
   mode: isCompanionBuild ? 'child' : 'admin',
   screen: isCompanionBuild ? 'child-home' : 'overview',
+  theme: savedTheme === 'amoled' ? 'amoled' : 'light',
+  sheetExpanded: false,
   locationSharing: true,
   audioRequest: false,
   connected: false,
@@ -83,6 +90,10 @@ const state = {
     selected: null,
   },
 };
+
+let activeMap = null;
+let activeRouteBounds = null;
+let sheetPointerStart = null;
 
 const quizQuestions = [
   { question: 'Quanto é 7 × 8?', options: ['48', '54', '56', '64'], answer: '56' },
@@ -180,6 +191,7 @@ function renderTopbar() {
     </div>
     <div class="topbar-right">
       <div class="topbar-status"><span class="status-dot"></span> Sistema seguro</div>
+      <button class="theme-toggle" data-action="toggle-theme" type="button" aria-label="Alternar tema AMOLED">${icon(state.theme === 'amoled' ? 'sun' : 'moon')}<span>${state.theme === 'amoled' ? 'AMOLED' : 'Claro'}</span></button>
       <button class="topbar-user" data-action="profile-menu" type="button" aria-label="Abrir perfil">
         <div class="topbar-user-copy"><strong>${userName}</strong><span>${state.mode === 'admin' ? 'Administradora' : 'Aparelho acompanhado'}</span></div>
         <div class="avatar ${state.mode === 'child' ? 'lia' : ''}">${userInitials}</div>
@@ -211,42 +223,47 @@ function mapMarkup(large = false) {
   </div>`;
 }
 
+function realMapMarkup() {
+  return `<div class="real-map-canvas" data-real-map aria-label="Mapa real da família com rota compartilhada"></div>`;
+}
+
 function metricCard({ iconName, label, value, foot, trend, tone = '' }) {
   return `<article class="metric-card ${tone}"><div class="metric-top"><span>${label}</span><span class="metric-icon">${icon(iconName)}</span></div><strong class="metric-value">${value}</strong><div class="metric-bottom"><span class="metric-foot ${tone === 'coral' ? 'alert' : 'good'}">${icon('checkCircle')} ${foot}</span>${trend ? `<span class="metric-trend">${icon('trend')} ${trend}</span>` : ''}</div></article>`;
 }
 
 function renderAdminOverview() {
-  return `<div class="dashboard">
-    <section class="welcome-row"><div><div class="eyebrow">SEGUNDA-FEIRA · 12 AGO 2024</div><h1>Bom dia, Ana <span>✦</span></h1><p class="welcome-subtitle">Um resumo tranquilo de quem importa para você.</p></div><button class="primary-button" data-action="open-pairing" type="button">${icon('plus')} Conectar aparelho</button></section>
-    <section class="metric-grid" aria-label="Resumo da família">
-      ${metricCard({ iconName: 'location', label: 'Localização ativa', value: '2 de 2', foot: 'Atualizado agora', trend: '+12%', tone: '' })}
-      ${metricCard({ iconName: 'alert', label: 'Alertas hoje', value: '01', foot: 'Requer atenção', trend: '1 novo', tone: 'coral' })}
-      ${metricCard({ iconName: 'route', label: 'Rotas concluídas', value: '04', foot: 'Nesta semana', trend: '+2', tone: 'blue' })}
-      ${metricCard({ iconName: 'clock', label: 'Tempo conectado', value: '98%', foot: 'Disponibilidade', trend: 'estável', tone: 'amber' })}
+  return `<div class="map-first-page ${state.sheetExpanded ? 'sheet-expanded' : ''}">
+    <header class="map-first-toolbar">
+      <div class="map-first-brand"><span class="brand-mark">${icon('shield')}</span><div><strong>ParentLock</strong><small>Mapa da família</small></div></div>
+      <div class="map-first-actions"><span class="live-chip"><span class="status-dot"></span> 2 online</span><button class="theme-toggle map-theme-toggle" data-action="toggle-theme" type="button" aria-label="Alternar tema AMOLED">${icon(state.theme === 'amoled' ? 'sun' : 'moon')}<span>${state.theme === 'amoled' ? 'AMOLED' : 'Claro'}</span></button><button class="map-profile" data-action="profile-menu" type="button" aria-label="Abrir perfil">AM</button></div>
+    </header>
+    <section class="map-first-stage">
+      ${realMapMarkup()}
+      <div class="map-place-pill">${icon('location')} Goiânia · agora</div>
+      <div class="map-live-card"><div class="avatar lia">LM</div><div><strong>Lia Martins</strong><span><span class="status-dot"></span> Em movimento · agora</span></div><button data-nav="map" type="button" aria-label="Abrir detalhes da rota">${icon('chevronRight')}</button></div>
+      <div class="map-action-stack"><button class="map-control" data-action="zoom-in" type="button" aria-label="Aumentar zoom">${icon('zoomIn')}</button><button class="map-control" data-action="zoom-out" type="button" aria-label="Diminuir zoom">${icon('zoomOut')}</button><button class="map-control" data-action="center-map" type="button" aria-label="Centralizar mapa">${icon('locate')}</button></div>
     </section>
-    <section class="content-grid">
-      <article class="panel map-panel"><div class="panel-header"><div class="panel-title-wrap"><h2>Mapa da família</h2><p>Veja apenas o que foi compartilhado com você.</p></div><span class="live-chip"><span class="status-dot"></span> AO VIVO</span></div><div class="map-toolbar"><button class="map-filter active" data-action="map-filter" type="button">${icon('users')} Todos</button><button class="map-filter" data-action="map-filter" type="button">${icon('route')} Rota ativa</button><button class="map-filter" data-action="map-filter" type="button">${icon('clock')} Histórico</button></div>${mapMarkup()}<div class="map-footer"><div class="map-footer-left">${icon('refresh')}<span>Última atualização</span><strong>agora</strong></div><button class="map-footer-right text-link" data-nav="map" type="button">Abrir mapa completo ${icon('arrowRight')}</button></div></article>
-      <article class="panel family-panel"><div class="panel-header"><div class="panel-title-wrap"><h2>Minha família</h2><p>2 aparelhos conectados</p></div><button class="ghost-button" data-action="open-pairing" type="button">${icon('plus')} Adicionar</button></div><div class="family-list">
-        <div class="family-member"><div class="avatar lia">LM</div><div class="member-info"><div class="member-name-line"><strong>Lia Martins</strong><span class="live-chip">online</span></div><div class="member-location">${icon('location')} Indo para Escola Horizonte</div></div><span class="member-status">agora</span></div>
-        <div class="family-member"><div class="avatar">AM</div><div class="member-info"><div class="member-name-line"><strong>Ana Martins</strong><span class="neutral-chip">você</span></div><div class="member-location">${icon('home')} Casa · compartilhando</div></div><span class="member-status">agora</span></div>
-        <div class="family-member"><div class="avatar" style="background:#e7b05a">JM</div><div class="member-info"><div class="member-name-line"><strong>João Martins</strong></div><div class="member-location">${icon('pause')} Compartilhamento pausado</div></div><span class="member-status paused">pausado</span></div>
-      </div><div class="family-footer"><button class="text-link" data-nav="connection" type="button">Gerenciar conexões ${icon('chevronRight')}</button></div></article>
+    <nav class="map-floating-nav" aria-label="Navegação do mapa">
+      <button class="map-nav-item active" data-nav="overview" type="button">${icon('map')}<span>Mapa</span></button>
+      <button class="map-nav-item" data-nav="map" type="button">${icon('route')}<span>Rotas</span></button>
+      <button class="map-nav-item" data-nav="alerts" type="button">${icon('alert')}<span>Alertas</span><b>1</b></button>
+      <button class="map-nav-item" data-nav="connection" type="button">${icon('link')}<span>Conexão</span></button>
+      <button class="map-nav-item" data-nav="settings" type="button">${icon('more')}<span>Mais</span></button>
+    </nav>
+    <section class="map-bottom-sheet" aria-label="Detalhes da família">
+      <button class="sheet-handle" data-action="toggle-sheet" type="button" aria-label="${state.sheetExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}"><span></span><small>${state.sheetExpanded ? 'Toque para recolher' : 'Deslize para ver detalhes'}</small></button>
+      <div class="sheet-content">
+        <div class="sheet-heading"><div><div class="eyebrow">FAMÍLIA AO VIVO</div><h2>Quem está por perto</h2></div><span class="live-chip"><span class="status-dot"></span> 2 conectados</span></div>
+        <div class="sheet-members"><div class="sheet-member"><div class="avatar lia">LM</div><div><strong>Lia Martins</strong><span>${icon('location')} Indo para Escola Horizonte</span></div><b>agora</b></div><div class="sheet-member"><div class="avatar">AM</div><div><strong>Ana Martins <em>você</em></strong><span>${icon('home')} Casa · compartilhando</span></div><b>agora</b></div></div>
+        <article class="sheet-route-card"><div class="sheet-route-icon">${icon('route')}</div><div class="sheet-route-copy"><strong>Lia está a caminho</strong><span>Casa → Escola Horizonte · chegada prevista 08:34</span></div><button class="text-link" data-nav="map" type="button">Ver rota ${icon('arrowRight')}</button></article>
+        <div class="sheet-stat-grid"><div class="sheet-stat"><span class="sheet-stat-icon mint">${icon('location')}</span><div><strong>2 de 2</strong><small>localizações ativas</small></div></div><div class="sheet-stat"><span class="sheet-stat-icon coral">${icon('alert')}</span><div><strong>01</strong><small>alerta pendente</small></div></div></div>
+        <div class="sheet-actions"><button class="secondary-button" data-nav="connection" type="button">${icon('plus')} Conectar aparelho</button><button class="secondary-button" data-nav="alerts" type="button">${icon('bell')} Ver alertas</button></div>
+      </div>
     </section>
-    <section class="bottom-grid"><article class="panel"><div class="panel-header"><div class="panel-title-wrap"><h2>Atividade recente</h2><p>O que aconteceu nos últimos minutos.</p></div><button class="text-link" data-nav="alerts" type="button">Ver tudo ${icon('arrowRight')}</button></div><div class="activity-list">
-      <div class="activity-item"><div class="activity-icon coral">${icon('alert')}</div><div class="activity-copy"><strong>Novo alerta de chegada</strong><p>Lia chegou à Escola Horizonte e confirmou segurança.</p></div><span class="activity-time">há 8 min</span></div>
-      <div class="activity-item"><div class="activity-icon">${icon('route')}</div><div class="activity-copy"><strong>Rota iniciada</strong><p>Trajeto Casa → Escola Horizonte compartilhado.</p></div><span class="activity-time">há 24 min</span></div>
-      <div class="activity-item"><div class="activity-icon blue">${icon('shieldCheck')}</div><div class="activity-copy"><strong>Permissão revisada</strong><p>Lia confirmou o compartilhamento de localização.</p></div><span class="activity-time">ontem</span></div>
-    </div></article><article class="panel"><div class="panel-header"><div class="panel-title-wrap"><h2>Ações rápidas</h2><p>Acesse os controles mais usados.</p></div></div><div class="quick-actions">
-      <button class="quick-action" data-nav="audio" type="button"><span class="quick-action-icon">${icon('audio')}</span><span class="quick-action-copy"><strong>Check-in de áudio</strong><span>Solicitar com aceite</span></span></button>
-      <button class="quick-action" data-action="open-sos-help" type="button"><span class="quick-action-icon">${icon('alert')}</span><span class="quick-action-copy"><strong>Central SOS</strong><span>Ver contatos e ajuda</span></span></button>
-      <button class="quick-action" data-nav="map" type="button"><span class="quick-action-icon">${icon('route')}</span><span class="quick-action-copy"><strong>Planejar rota</strong><span>Compartilhar caminho</span></span></button>
-      <button class="quick-action" data-nav="settings" type="button"><span class="quick-action-icon">${icon('shield')}</span><span class="quick-action-copy"><strong>Privacidade</strong><span>Revisar permissões</span></span></button>
-    </div></article></section>
   </div>`;
 }
-
 function renderMapPage() {
-  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">LOCALIZAÇÃO COMPARTILHADA</div><h1>Mapa e rotas</h1><p>Acompanhe a rota ativa de Lia com atualização transparente.</p></div><div class="page-heading-actions"><button class="secondary-button" data-action="share-route" type="button">${icon('send')} Compartilhar rota</button><button class="primary-button" data-action="center-map" type="button">${icon('locate')} Centralizar</button></div></section><section class="inner-grid"><article class="panel map-panel large-map"><div class="panel-header"><div class="panel-title-wrap"><h2>Rota atual</h2><p>Casa → Escola Horizonte · iniciada às 08:12</p></div><span class="live-chip"><span class="status-dot"></span> ATUALIZADO AGORA</span></div><div class="map-toolbar"><button class="map-filter active" data-action="map-filter" type="button">${icon('users')} Lia Martins</button><button class="map-filter" data-action="map-filter" type="button">${icon('route')} Rota de hoje</button></div>${mapMarkup(true)}<div class="map-footer"><div class="map-footer-left">${icon('location')}<span>Precisão aproximada</span><strong>12 m</strong></div><button class="map-footer-right text-link" data-action="map-details" type="button">Detalhes da atualização ${icon('chevronRight')}</button></div></article><aside class="panel route-summary"><div class="route-summary-header"><div><h2>Detalhes da rota</h2><p>Deslocamento em andamento</p></div><span class="route-distance">2,4 km</span></div><div class="route-points"><div class="route-point"><strong>Casa Martins</strong><span>${icon('location')} Rua das Acácias, 120</span><small>08:12</small></div><div class="route-point"><strong>Lia está a caminho</strong><span>${icon('navigation')} Av. das Flores, próximo à Praça Central</span><small>agora</small></div><div class="route-point"><strong>Escola Horizonte</strong><span>${icon('home')} Previsão de chegada</span><small>08:34</small></div></div><button class="secondary-button" data-action="route-alert" type="button">${icon('bell')} Avisar chegada automaticamente</button></aside></section></div>`;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">LOCALIZAÇÃO COMPARTILHADA</div><h1>Mapa e rotas</h1><p>Acompanhe a rota ativa de Lia com atualização transparente.</p></div><div class="page-heading-actions"><button class="secondary-button" data-action="share-route" type="button">${icon('send')} Compartilhar rota</button><button class="primary-button" data-action="center-map" type="button">${icon('locate')} Centralizar</button></div></section><section class="inner-grid"><article class="panel map-panel large-map"><div class="panel-header"><div class="panel-title-wrap"><h2>Rota atual</h2><p>Casa → Escola Horizonte · iniciada às 08:12</p></div><span class="live-chip"><span class="status-dot"></span> ATUALIZADO AGORA</span></div><div class="map-toolbar"><button class="map-filter active" data-action="map-filter" type="button">${icon('users')} Lia Martins</button><button class="map-filter" data-action="map-filter" type="button">${icon('route')} Rota de hoje</button></div>${realMapMarkup()}<div class="map-footer"><div class="map-footer-left">${icon('location')}<span>Precisão aproximada</span><strong>12 m</strong></div><button class="map-footer-right text-link" data-action="map-details" type="button">Detalhes da atualização ${icon('chevronRight')}</button></div></article><aside class="panel route-summary"><div class="route-summary-header"><div><h2>Detalhes da rota</h2><p>Deslocamento em andamento</p></div><span class="route-distance">2,4 km</span></div><div class="route-points"><div class="route-point"><strong>Casa Martins</strong><span>${icon('location')} Rua das Acácias, 120</span><small>08:12</small></div><div class="route-point"><strong>Lia está a caminho</strong><span>${icon('navigation')} Av. das Flores, próximo à Praça Central</span><small>agora</small></div><div class="route-point"><strong>Escola Horizonte</strong><span>${icon('home')} Previsão de chegada</span><small>08:34</small></div></div><button class="secondary-button" data-action="route-alert" type="button">${icon('bell')} Avisar chegada automaticamente</button></aside></section></div>`;
 }
 
 function renderAlertsPage() {
@@ -319,9 +336,100 @@ function renderCurrentScreen() {
   return renderAdminOverview();
 }
 
+const demoRoute = [
+  [-16.6869, -49.2648],
+  [-16.6828, -49.2581],
+  [-16.6784, -49.2517],
+  [-16.6727, -49.2452],
+  [-16.6674, -49.2389],
+];
+
+function destroyRealMap() {
+  if (activeMap) {
+    activeMap.remove();
+    activeMap = null;
+    activeRouteBounds = null;
+  }
+}
+
+function setupRealMap() {
+  const container = document.querySelector('[data-real-map]');
+  if (!container) return;
+  const routeBounds = L.latLngBounds(demoRoute);
+  const map = L.map(container, {
+    zoomControl: false,
+    attributionControl: true,
+    preferCanvas: true,
+  });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap',
+  }).addTo(map);
+  L.polyline(demoRoute, {
+    color: '#45cfb2',
+    weight: 6,
+    opacity: 0.96,
+    lineCap: 'round',
+    lineJoin: 'round',
+  }).addTo(map);
+  L.polyline(demoRoute, {
+    color: '#ffffff',
+    weight: 2,
+    opacity: 0.75,
+    dashArray: '5 8',
+    lineCap: 'round',
+  }).addTo(map);
+  L.marker(demoRoute[3], {
+    icon: L.divIcon({
+      className: 'family-leaflet-marker',
+      html: '<span><b>LM</b></span>',
+      iconSize: [46, 46],
+      iconAnchor: [23, 23],
+    }),
+  }).addTo(map);
+  L.circleMarker(demoRoute[0], {
+    radius: 9,
+    color: '#ffffff',
+    weight: 4,
+    fillColor: '#159f87',
+    fillOpacity: 1,
+  }).addTo(map);
+  map.fitBounds(routeBounds, { paddingTopLeft: [24, 100], paddingBottomRight: [24, 230] });
+  activeMap = map;
+  activeRouteBounds = routeBounds;
+  window.setTimeout(() => map.invalidateSize(), 120);
+}
+
+function setupSheetGestures() {
+  const handle = document.querySelector('.sheet-handle');
+  if (!handle) return;
+  handle.addEventListener('pointerdown', (event) => {
+    sheetPointerStart = event.clientY;
+    handle.setPointerCapture?.(event.pointerId);
+  });
+  handle.addEventListener('pointerup', (event) => {
+    if (sheetPointerStart === null) return;
+    const delta = event.clientY - sheetPointerStart;
+    sheetPointerStart = null;
+    if (Math.abs(delta) > 24) {
+      event.preventDefault();
+      state.sheetExpanded = delta < 0;
+      renderApp();
+    }
+  });
+  handle.addEventListener('pointercancel', () => {
+    sheetPointerStart = null;
+  });
+}
+
 function renderApp() {
+  destroyRealMap();
+  document.documentElement.dataset.theme = state.theme;
   const app = document.querySelector('#app');
-  app.innerHTML = `<div class="app-shell">${renderSidebar()}<main class="main-content">${renderTopbar()}${renderCurrentScreen()}</main></div>${renderMobileNav()}`;
+  const immersiveMap = state.mode === 'admin' && state.screen === 'overview';
+  app.innerHTML = `<div class="app-shell">${renderSidebar()}<main class="main-content">${immersiveMap ? '' : renderTopbar()}${renderCurrentScreen()}</main></div>${immersiveMap ? '' : renderMobileNav()}`;
+  setupRealMap();
+  setupSheetGestures();
 }
 
 function showToast(message, tone = 'success') {
@@ -459,6 +567,23 @@ function handleClick(event) {
     return;
   }
 
+  if (action === 'toggle-theme') {
+    state.theme = state.theme === 'amoled' ? 'light' : 'amoled';
+    try {
+      localStorage.setItem('parentlock-theme', state.theme);
+    } catch {
+      // A preferência continua válida durante esta sessão mesmo sem storage.
+    }
+    renderApp();
+    return;
+  }
+
+  if (action === 'toggle-sheet') {
+    state.sheetExpanded = !state.sheetExpanded;
+    renderApp();
+    return;
+  }
+
   if (action === 'profile-menu') {
     showToast('Perfil e notificações estarão disponíveis na próxima etapa.', 'warning');
     return;
@@ -585,7 +710,10 @@ function handleClick(event) {
   }
 
   if (['zoom-in', 'zoom-out', 'center-map', 'map-details'].includes(action)) {
-    showToast(action === 'center-map' ? 'Mapa centralizado na rota de Lia.' : 'Controles do mapa estarão conectados ao mapa real na próxima etapa.');
+    if (activeMap && action === 'zoom-in') activeMap.zoomIn();
+    if (activeMap && action === 'zoom-out') activeMap.zoomOut();
+    if (activeMap && action === 'center-map' && activeRouteBounds) activeMap.fitBounds(activeRouteBounds, { paddingTopLeft: [24, 100], paddingBottomRight: [24, 230] });
+    if (action === 'map-details') showToast('Detalhes da rota atualizados agora.');
     return;
   }
 
