@@ -73,7 +73,7 @@ begin
   values (
     target_household,
     auth.uid(),
-    encode(digest(raw_code, 'sha256'), 'hex'),
+    encode(extensions.digest(raw_code, 'sha256'), 'hex'),
     now() + interval '15 minutes'
   );
 
@@ -100,7 +100,7 @@ begin
 
   select * into invite
   from public.pairing_codes
-  where code_hash = encode(digest(normalized_code, 'sha256'), 'hex')
+  where code_hash = encode(extensions.digest(normalized_code, 'sha256'), 'hex')
     and consumed_at is null
     and expires_at > now()
   order by created_at desc

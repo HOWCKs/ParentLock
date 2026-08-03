@@ -49,7 +49,7 @@ begin
   end if;
 
   insert into public.email_invites (household_id, inviter_id, invitee_email_hash)
-  values (target_household, auth.uid(), encode(digest(normalized_email, 'sha256'), 'hex'))
+  values (target_household, auth.uid(), encode(extensions.digest(normalized_email, 'sha256'), 'hex'))
   returning id into invite_id;
 
   return jsonb_build_object(
@@ -75,7 +75,7 @@ set search_path = public
 as $$
   select id, household_id, status, created_at, expires_at
   from public.email_invites
-  where invitee_email_hash = encode(digest(lower(auth.jwt()->>'email'), 'sha256'), 'hex')
+  where invitee_email_hash = encode(extensions.digest(lower(auth.jwt()->>'email'), 'sha256'), 'hex')
     and status = 'pending'
     and expires_at > now()
   order by created_at desc;
@@ -97,7 +97,7 @@ begin
   where id = input_invite_id
     and status = 'pending'
     and expires_at > now()
-    and invitee_email_hash = encode(digest(lower(auth.jwt()->>'email'), 'sha256'), 'hex');
+    and invitee_email_hash = encode(extensions.digest(lower(auth.jwt()->>'email'), 'sha256'), 'hex');
 
   if invite.id is null or auth.uid() is null then
     raise exception 'invite_not_available';
@@ -146,6 +146,9 @@ $$;
 
 alter table public.email_invites enable row level security;
 
+drop policy if exists "admins can view email invites" on public.email_invites;
+drop policy if exists "invitees can view their email invites" on public.email_invites;
+
 create policy "admins can view email invites"
   on public.email_invites for select
   using (inviter_id = auth.uid() or public.is_household_member(household_id));
@@ -153,7 +156,7 @@ create policy "admins can view email invites"
 create policy "invitees can view their email invites"
   on public.email_invites for select
   using (
-    invitee_email_hash = encode(digest(lower(auth.jwt()->>'email'), 'sha256'), 'hex')
+    invitee_email_hash = encode(extensions.digest(lower(auth.jwt()->>'email'), 'sha256'), 'hex')
   );
 
 do $$ begin
