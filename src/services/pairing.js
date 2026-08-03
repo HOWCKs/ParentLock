@@ -15,6 +15,38 @@ export async function ensureHousehold() {
   return { ok: true, householdId: data };
 }
 
+export async function listPendingPairingRequests(householdId) {
+  if (!supabaseConfigured || !supabase || !householdId) return { ok: false, requests: [], reason: 'not-configured' };
+  const { data, error } = await supabase
+    .from('pairing_requests')
+    .select('id, household_id, requester_id, status, created_at')
+    .eq('household_id', householdId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  if (error) return { ok: false, requests: [], reason: 'request-failed', error };
+  return { ok: true, requests: data || [] };
+}
+
+export async function listConnectedDevices(householdId) {
+  if (!supabaseConfigured || !supabase || !householdId) return { ok: false, devices: [], reason: 'not-configured' };
+  const { data, error } = await supabase
+    .from('devices')
+    .select('id, household_id, user_id, role, label, platform, last_seen_at, created_at')
+    .eq('household_id', householdId)
+    .order('created_at', { ascending: true });
+  if (error) return { ok: false, devices: [], reason: 'request-failed', error };
+  return { ok: true, devices: data || [] };
+}
+
+export async function acceptPairingRequest(requestId) {
+  if (!supabaseConfigured || !supabase || !requestId) return { ok: false, reason: 'not-configured' };
+  const { data, error } = await supabase.rpc('accept_pairing_request', {
+    input_request_id: requestId,
+  });
+  if (error) return { ok: false, reason: 'request-failed', error };
+  return { ok: data === true, data };
+}
+
 export async function createPairingCode(householdId) {
   if (!supabaseConfigured || !supabase) return { ok: false, reason: 'backend-not-configured' };
   if (!householdId) return { ok: false, reason: 'household-required' };

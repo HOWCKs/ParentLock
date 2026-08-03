@@ -2,7 +2,7 @@ import L from 'leaflet';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { createPairingCode, ensureHousehold, redeemPairingCode, normalizePairingCode } from './services/pairing';
+import { acceptPairingRequest, createPairingCode, ensureHousehold, listConnectedDevices, listPendingPairingRequests, redeemPairingCode, normalizePairingCode } from './services/pairing';
 import { getCurrentSession, signInWithPassword, signUpWithPassword } from './services/auth';
 import { supabaseConfigured, supabase } from './services/supabase';
 import 'leaflet/dist/leaflet.css';
@@ -99,6 +99,7 @@ const state = {
   authBusy: false,
   pairingCode: '',
   pairingCodeExpiresAt: null,
+  pendingPairingRequests: [],
   settings: {
     liveLocation: false,
     arrivalAlerts: false,
@@ -373,6 +374,16 @@ function renderMapPage() {
 function renderAlertsPage() {
   return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">CENTRAL DE SEGURANÇA</div><h1>Alertas</h1><p>Aqui aparecerão somente eventos reais enviados pelos aparelhos vinculados.</p></div><span class="neutral-chip">0 alertas</span></section><section class="alert-overview"><article class="panel alert-stat-card"><div class="alert-stat-icon">${icon('bell')}</div><div><strong>0</strong><span>alertas pendentes</span></div></article><div class="alert-banner">${icon('info')}<div class="alert-banner-copy"><strong>Nenhum evento registrado</strong><p>Os alertas serão exibidos depois que houver um vínculo ativo e uma permissão de notificação.</p></div><button class="text-link" data-nav="settings" type="button">Configurar ${icon('chevronRight')}</button></div></section><article class="panel alert-list-panel"><div class="panel-header"><div class="panel-title-wrap"><h2>Histórico de alertas</h2><p>Sem dados para exibir.</p></div></div><div class="empty-sheet-state alert-empty-state"><span class="empty-state-icon">${icon('bell')}</span><strong>Nenhum alerta por enquanto</strong><p>Quando houver uma chegada, SOS ou mudança importante, ela aparecerá aqui com data e contexto.</p><button class="primary-button" data-nav="connection" type="button">${icon('plus')} Conectar aparelho</button></div></article></div>`;
 }
+function renderParticipantsPanel(child) {
+  if (state.connectedDevices.length) {
+    return `<div class="device-list">${state.connectedDevices.map((device) => `<div class="device-row"><div class="avatar ${device.role === 'companion' ? 'lia' : ''}">${device.role === 'companion' ? 'CP' : 'AD'}</div><div class="device-copy"><strong>${device.label || (device.role === 'companion' ? 'Companion conectado' : 'Admin conectado')}</strong><span>${device.platform || 'Aparelho autorizado'} · vínculo ativo</span></div><span class="member-status">ativo</span></div>`).join('')}</div>`;
+  }
+  if (!child && state.pendingPairingRequests.length) {
+    return `<div class="pending-request-list">${state.pendingPairingRequests.map((request) => `<div class="pending-request"><span class="pending-request-icon">${icon('link')}</span><div class="pending-request-copy"><strong>Solicitação de vínculo</strong><span>Um aparelho aguarda sua revisão.</span><small>${new Date(request.created_at).toLocaleString('pt-BR')}</small></div><button class="primary-button" data-action="accept-pairing" data-request-id="${request.id}" type="button">${icon('check')} Aceitar</button></div>`).join('')}</div>`;
+  }
+  return `<div class="empty-sheet-state device-empty-state"><span class="empty-state-icon">${icon('users')}</span><strong>Nenhum aparelho conectado</strong><p>${child ? 'Os aparelhos só aparecerão após uma confirmação real dos dois lados.' : 'Quando o Companion enviar um pedido, ele aparecerá aqui para sua revisão.'}</p><button class="secondary-button" data-action="refresh-connections" type="button">${icon('refresh')} Atualizar</button></div>`;
+}
+
 function renderConnectionPage() {
   const child = state.mode === 'child';
   const canGenerate = supabaseConfigured && Boolean(state.householdId);
@@ -380,7 +391,7 @@ function renderConnectionPage() {
   const codeBlock = state.pairingCode
     ? `<div class="code-preview"><div class="code-preview-copy"><span>CÓDIGO DE CONVITE · EXPIRA EM 15 MIN</span><strong>${state.pairingCode}</strong></div><button class="copy-button" data-action="copy-code" type="button" aria-label="Copiar código">${icon('copy')}</button></div>`
     : `<div class="empty-connection-intro"><span class="empty-state-icon">${icon('link')}</span><div><strong>Nenhum convite ativo</strong><p>${canGenerate ? 'Gere um convite quando estiver pronto para iniciar um vínculo.' : 'A geração ficará disponível depois que a conta do administrador e o serviço seguro estiverem configurados.'}</p></div></div>`;
-  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">VÍNCULO COM ACEITE</div><h1>${child ? 'Conectar responsável' : 'Conectar aparelho'}</h1><p>${child ? 'Quando receber um convite, digite o código aqui.' : 'O administrador cria o código; o outro aparelho entra com aceite explícito.'}</p></div><span class="${supabaseConfigured ? 'live-chip' : 'neutral-chip'}">${icon(supabaseConfigured ? 'checkCircle' : 'lock')} ${serviceLabel}</span></section><section class="connection-layout"><article class="panel connection-card"><div class="stepper"><div class="step active"><span class="step-number">1</span><span>${child ? 'Receba o código' : 'Gere o convite'}</span></div><div class="step"><span class="step-number">2</span><span>${child ? 'Revise o pedido' : 'Aguarde o aceite'}</span></div><div class="step"><span class="step-number">3</span><span>Escolha o que compartilhar</span></div></div>${child ? `<label class="connection-form-label" for="pair-code-input">Código recebido</label><div class="input-wrap">${icon('key')}<input id="pair-code-input" class="text-input" maxlength="24" placeholder="Digite o código do convite" autocomplete="off" /></div><p class="form-help">O código será validado pelo serviço de conexão. Nenhum aparelho é vinculado somente por digitar um texto.</p><div class="form-actions"><button class="secondary-button" data-nav="child-settings" type="button">${icon('shieldCheck')} Privacidade</button><button class="primary-button" data-action="connect-code" type="button">${icon('link')} Validar convite</button></div>` : `${codeBlock}<div class="form-actions"><button class="primary-button" data-action="create-pairing-code" type="button" ${canGenerate ? '' : 'disabled'}>${icon('key')} ${state.pairingCode ? 'Gerar novo código' : 'Gerar código de convite'}</button><button class="secondary-button" data-action="connection-info" type="button">${icon('info')} Como funciona</button></div>`}<div class="consent-note">${icon('shieldCheck')}<span>Nada começa escondido: cada participante verá quais dados serão compartilhados, poderá aceitar ou recusar e poderá pausar o vínculo depois.</span></div></article><article class="panel connected-devices"><div class="panel-header"><div class="panel-title-wrap"><h2>Participantes vinculados</h2><p>Sem dados preenchidos neste aparelho.</p></div><span class="neutral-chip">0 ativos</span></div><div class="empty-sheet-state device-empty-state"><span class="empty-state-icon">${icon('users')}</span><strong>Nenhum aparelho conectado</strong><p>Os aparelhos só aparecerão após uma confirmação real dos dois lados.</p><button class="secondary-button" data-nav="${child ? 'child-settings' : 'settings'}" type="button">${icon('shieldCheck')} Revisar privacidade</button></div></article></section></div>`;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">VÍNCULO COM ACEITE</div><h1>${child ? 'Conectar responsável' : 'Conectar aparelho'}</h1><p>${child ? 'Quando receber um convite, digite o código aqui.' : 'O administrador cria o código; o outro aparelho entra com aceite explícito.'}</p></div><span class="${supabaseConfigured ? 'live-chip' : 'neutral-chip'}">${icon(supabaseConfigured ? 'checkCircle' : 'lock')} ${serviceLabel}</span></section><section class="connection-layout"><article class="panel connection-card"><div class="stepper"><div class="step active"><span class="step-number">1</span><span>${child ? 'Receba o código' : 'Gere o convite'}</span></div><div class="step"><span class="step-number">2</span><span>${child ? 'Revise o pedido' : 'Aguarde o aceite'}</span></div><div class="step"><span class="step-number">3</span><span>Escolha o que compartilhar</span></div></div>${child ? `<label class="connection-form-label" for="pair-code-input">Código recebido</label><div class="input-wrap">${icon('key')}<input id="pair-code-input" class="text-input" maxlength="24" placeholder="Digite o código do convite" autocomplete="off" /></div><p class="form-help">O código será validado pelo serviço de conexão. Nenhum aparelho é vinculado somente por digitar um texto.</p><div class="form-actions"><button class="secondary-button" data-nav="child-settings" type="button">${icon('shieldCheck')} Privacidade</button><button class="primary-button" data-action="connect-code" type="button">${icon('link')} Validar convite</button></div>` : `${codeBlock}<div class="form-actions"><button class="primary-button" data-action="create-pairing-code" type="button" ${canGenerate ? '' : 'disabled'}>${icon('key')} ${state.pairingCode ? 'Gerar novo código' : 'Gerar código de convite'}</button><button class="secondary-button" data-action="connection-info" type="button">${icon('info')} Como funciona</button></div>`}<div class="consent-note">${icon('shieldCheck')}<span>Nada começa escondido: cada participante verá quais dados serão compartilhados, poderá aceitar ou recusar e poderá pausar o vínculo depois.</span></div></article><article class="panel connected-devices"><div class="panel-header"><div class="panel-title-wrap"><h2>Participantes vinculados</h2><p>${state.pendingPairingRequests.length ? 'Solicitações aguardando sua revisão.' : 'Estado real dos aparelhos autorizados.'}</p></div><span class="${state.connectedDevices.length ? 'live-chip' : 'neutral-chip'}">${state.connectedDevices.length} ativos</span></div>${renderParticipantsPanel(child)}</article></section></div>`;
 }
 function renderAudioPage() {
   const hasDevice = state.connectedDevices.length > 0;
@@ -590,10 +601,22 @@ async function handleAuthSubmit() {
   state.session = result.data.session;
   if (state.mode === 'admin') {
     const household = await ensureHousehold();
-    if (household.ok) state.householdId = household.householdId;
-    else state.authError = 'Conta autenticada, mas a família ainda não pôde ser criada. Verifique a migration do Supabase.';
+    if (household.ok) {
+      state.householdId = household.householdId;
+      await loadHouseholdState();
+    } else state.authError = 'Conta autenticada, mas a família ainda não pôde ser criada. Verifique a migration do Supabase.';
   }
   renderApp();
+}
+
+async function loadHouseholdState() {
+  if (state.mode !== 'admin' || !state.householdId) return;
+  const [pending, devices] = await Promise.all([
+    listPendingPairingRequests(state.householdId),
+    listConnectedDevices(state.householdId),
+  ]);
+  if (pending.ok) state.pendingPairingRequests = pending.requests;
+  if (devices.ok) state.connectedDevices = devices.devices;
 }
 
 async function hydrateAuth() {
@@ -605,7 +628,10 @@ async function hydrateAuth() {
     state.session = await getCurrentSession();
     if (state.session && state.mode === 'admin') {
       const household = await ensureHousehold();
-      if (household.ok) state.householdId = household.householdId;
+      if (household.ok) {
+        state.householdId = household.householdId;
+        await loadHouseholdState();
+      }
     }
   } catch {
     state.session = null;
@@ -853,6 +879,27 @@ async function handleClick(event) {
     }
     if (navigator.clipboard) navigator.clipboard.writeText(state.pairingCode).catch(() => {});
     showToast('Código de convite copiado.');
+    return;
+  }
+
+  if (action === 'accept-pairing') {
+    const requestId = target.dataset.requestId;
+    if (!requestId) return;
+    showToast('Confirmando o vínculo…');
+    const result = await acceptPairingRequest(requestId);
+    if (!result.ok) {
+      showToast('Não foi possível aceitar este vínculo. Tente novamente.', 'warning');
+      return;
+    }
+    await loadHouseholdState();
+    renderApp();
+    showToast('Vínculo aceito. Revise as permissões compartilhadas.');
+    return;
+  }
+
+  if (action === 'refresh-connections') {
+    await loadHouseholdState();
+    renderApp();
     return;
   }
 

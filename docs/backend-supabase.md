@@ -8,6 +8,7 @@ Execute nesta ordem:
 0001_extensions_and_tables.sql
 0002_pairing_functions.sql
 0003_rls_and_realtime.sql
+0004_activate_companion_device.sql
 ```
 
 Cada arquivo é independente para colar no SQL Editor. Não pule a ordem.
