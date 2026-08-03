@@ -58,7 +58,7 @@ export async function listConnectedDevices(householdId) {
   if (!supabaseConfigured || !supabase || !householdId) return { ok: false, devices: [], reason: 'not-configured' };
   const { data, error } = await supabase
     .from('devices')
-    .select('id, household_id, user_id, role, label, platform, last_seen_at, created_at')
+    .select('id, household_id, user_id, role, label, platform, battery_percent, connection_type, last_seen_at, last_status_at, created_at')
     .eq('household_id', householdId)
     .order('created_at', { ascending: true });
   if (error) return { ok: false, devices: [], reason: 'request-failed', error };

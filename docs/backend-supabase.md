@@ -11,6 +11,7 @@ Execute nesta ordem:
 0004_activate_companion_device.sql
 0005_email_invites.sql
 0006_fix_pgcrypto_schema.sql
+0007_device_status.sql
 ```
 
 Cada arquivo é independente para colar no SQL Editor. Não pule a ordem.

@@ -1,7 +1,9 @@
 import L from 'leaflet';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Device } from '@capacitor/device';
 import { Geolocation } from '@capacitor/geolocation';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { Network } from '@capacitor/network';
 import { acceptEmailInvite, acceptPairingRequest, createEmailInvite, createPairingCode, ensureHousehold, listConnectedDevices, listMyEmailInvites, listPendingPairingRequests, redeemPairingCode, normalizePairingCode } from './services/pairing';
 import { getCurrentSession, signInWithPassword, signUpWithPassword } from './services/auth';
 import { supabaseConfigured, supabase } from './services/supabase';
@@ -59,6 +61,7 @@ const iconPaths = {
   volume: '<path d="M4 10v4h3l4 3V7l-4 3H4ZM15 9.5a4 4 0 0 1 0 5M17.5 7a7.5 7.5 0 0 1 0 10"/>',
   eye: '<path d="M2.5 12s3.4-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.4 5.5-9.5 5.5S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.5"/>',
   database: '<ellipse cx="12" cy="5.5" rx="7" ry="3"/><path d="M5 5.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6M5 11.5v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
+  battery: '<rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4M6 10v4M10 10v4M14 10v4"/>',
   trash: '<path d="M4 7h16M10 11v5M14 11v5M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   homeHeart: '<path d="m3.5 10.8 8.5-7 8.5 7"/><path d="M5.5 9.8V20h13V9.8"/><path d="m12 16.8-.7-.6c-1.8-1.5-2.8-2.5-2.8-3.7a1.9 1.9 0 0 1 3.5-1 1.9 1.9 0 0 1 3.5 1c0 1.2-1 2.2-2.8 3.7l-.7.6Z"/>',
 };
@@ -101,6 +104,12 @@ const state = {
   pairingCodeExpiresAt: null,
   pendingPairingRequests: [],
   emailInvites: [],
+  currentDeviceId: '',
+  deviceStatus: {
+    batteryPercent: null,
+    connectionType: 'unknown',
+    lastSeenAt: null,
+  },
   settings: {
     liveLocation: false,
     arrivalAlerts: false,
@@ -122,6 +131,7 @@ const state = {
 let activeMap = null;
 let activeBaseLayer = null;
 let activeRouteBounds = null;
+let realtimeChannel = null;
 let sheetPointerStart = null;
 
 const quizQuestions = [
@@ -375,9 +385,15 @@ function renderMapPage() {
 function renderAlertsPage() {
   return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">CENTRAL DE SEGURANÇA</div><h1>Alertas</h1><p>Aqui aparecerão somente eventos reais enviados pelos aparelhos vinculados.</p></div><span class="neutral-chip">0 alertas</span></section><section class="alert-overview"><article class="panel alert-stat-card"><div class="alert-stat-icon">${icon('bell')}</div><div><strong>0</strong><span>alertas pendentes</span></div></article><div class="alert-banner">${icon('info')}<div class="alert-banner-copy"><strong>Nenhum evento registrado</strong><p>Os alertas serão exibidos depois que houver um vínculo ativo e uma permissão de notificação.</p></div><button class="text-link" data-nav="settings" type="button">Configurar ${icon('chevronRight')}</button></div></section><article class="panel alert-list-panel"><div class="panel-header"><div class="panel-title-wrap"><h2>Histórico de alertas</h2><p>Sem dados para exibir.</p></div></div><div class="empty-sheet-state alert-empty-state"><span class="empty-state-icon">${icon('bell')}</span><strong>Nenhum alerta por enquanto</strong><p>Quando houver uma chegada, SOS ou mudança importante, ela aparecerá aqui com data e contexto.</p><button class="primary-button" data-nav="connection" type="button">${icon('plus')} Conectar aparelho</button></div></article></div>`;
 }
+function deviceStatusLabel(device) {
+  const battery = typeof device.battery_percent === 'number' ? `${device.battery_percent}% bateria` : 'bateria pendente';
+  const network = device.connection_type === 'wifi' ? 'Wi-Fi' : device.connection_type === 'cellular' ? 'dados móveis' : 'conexão pendente';
+  return `${battery} · ${network}`;
+}
+
 function renderParticipantsPanel(child) {
   if (state.connectedDevices.length) {
-    return `<div class="device-list">${state.connectedDevices.map((device) => `<div class="device-row"><div class="avatar ${device.role === 'companion' ? 'lia' : ''}">${device.role === 'companion' ? 'CP' : 'AD'}</div><div class="device-copy"><strong>${device.label || (device.role === 'companion' ? 'Companion conectado' : 'Admin conectado')}</strong><span>${device.platform || 'Aparelho autorizado'} · vínculo ativo</span></div><span class="member-status">ativo</span></div>`).join('')}</div>`;
+    return `<div class="device-list">${state.connectedDevices.map((device) => `<div class="device-row"><div class="avatar ${device.role === 'companion' ? 'lia' : ''}">${device.role === 'companion' ? 'CP' : 'AD'}</div><div class="device-copy"><strong>${device.label || (device.role === 'companion' ? 'Companion conectado' : 'Admin conectado')}</strong><span>${device.platform || 'Aparelho autorizado'} · ${deviceStatusLabel(device)}</span></div><span class="member-status">ativo</span></div>`).join('')}</div>`;
   }
   if (!child && state.pendingPairingRequests.length) {
     return `<div class="pending-request-list">${state.pendingPairingRequests.map((request) => `<div class="pending-request"><span class="pending-request-icon">${icon('link')}</span><div class="pending-request-copy"><strong>Solicitação de vínculo</strong><span>Um aparelho aguarda sua revisão.</span><small>${new Date(request.created_at).toLocaleString('pt-BR')}</small></div><button class="primary-button" data-action="accept-pairing" data-request-id="${request.id}" type="button">${icon('check')} Aceitar</button></div>`).join('')}</div>`;
@@ -430,7 +446,9 @@ function renderQuizPage() {
 function renderChildHome() {
   const hasLocation = state.locationPermission === 'granted' && state.userLocation;
   const hasDevice = state.connectedDevices.length > 0;
-  return `<div class="dashboard child-dashboard"><section class="child-welcome"><div class="child-welcome-copy"><div class="eyebrow">SEU ESPAÇO · TUDO VISÍVEL</div><h1>Olá <span>✦</span></h1><p>Ferramentas para o dia a dia e uma área clara de proteção.</p></div><div class="avatar lia">EU</div></section><section class="child-grid"><article class="sos-card"><div class="sos-copy"><div class="eyebrow">EMERGÊNCIA</div><h2>SOS</h2><p>${hasDevice ? 'Use somente quando precisar de ajuda. Os participantes autorizados serão avisados.' : 'Conecte um responsável para ativar o envio de alertas.'}</p></div><button class="sos-button" data-action="sos" type="button" aria-label="Enviar alerta SOS">SOS</button></article><article class="panel location-card"><div class="location-card-header"><h2>Minha localização</h2>${icon('location')}</div><div class="location-status ${state.locationSharing ? '' : 'paused'}"><span class="status-dot"></span> ${state.locationSharing ? 'Compartilhamento desativado' : 'Não compartilhando'}</div><p>${hasLocation ? `Precisão aproximada: ${state.locationAccuracy || '—'} m.` : 'Nenhuma permissão de localização foi concedida neste aparelho.'}</p><button class="text-link" data-action="${hasLocation ? 'toggle-location' : 'request-location'}" type="button">${hasLocation ? (state.locationSharing ? 'Pausar compartilhamento' : 'Compartilhar localização') : 'Ativar localização'} ${icon(hasLocation && state.locationSharing ? 'pause' : 'locate')}</button></article><article class="panel child-route-card child-full-width"><div class="child-route-copy"><h2>Rotas compartilhadas</h2><p>${hasDevice ? 'Nenhuma rota recebida ainda.' : 'Conecte um responsável para receber uma rota.'}</p><div class="empty-route-inline">${icon('route')}<span>Aqui aparecerá somente uma rota realmente compartilhada.</span></div></div><button class="secondary-button" data-action="${hasDevice ? 'view-child-route' : 'go-connection'}" type="button">${icon(hasDevice ? 'map' : 'link')} ${hasDevice ? 'Ver rotas' : 'Conectar'}</button></article><article class="transparency-card"><span class="soft-chip">${icon('shieldCheck')} PROTEÇÃO VISÍVEL</span><h2>Privacidade primeiro</h2><p>Você pode revisar permissões, ver o estado do vínculo e pausar qualquer compartilhamento.</p><button class="secondary-button" data-nav="child-settings" type="button">${icon('settings')} Revisar permissões</button></article>${renderCalculatorCard()}</section></div>`;
+  const batteryLabel = typeof state.deviceStatus.batteryPercent === 'number' ? `${state.deviceStatus.batteryPercent}%` : '—';
+  const networkLabel = state.deviceStatus.connectionType === 'wifi' ? 'Wi-Fi' : state.deviceStatus.connectionType === 'cellular' ? 'Dados móveis' : 'Sem conexão';
+  return `<div class="dashboard child-dashboard"><section class="child-welcome"><div class="child-welcome-copy"><div class="eyebrow">SEU ESPAÇO · TUDO VISÍVEL</div><h1>Olá <span>✦</span></h1><p>Ferramentas para o dia a dia e uma área clara de proteção.</p></div><div class="avatar lia">EU</div></section><section class="child-grid"><article class="sos-card"><div class="sos-copy"><div class="eyebrow">EMERGÊNCIA</div><h2>SOS</h2><p>${hasDevice ? 'Use somente quando precisar de ajuda. Os participantes autorizados serão avisados.' : 'Conecte um responsável para ativar o envio de alertas.'}</p></div><button class="sos-button" data-action="sos" type="button" aria-label="Enviar alerta SOS">SOS</button></article><article class="panel location-card"><div class="location-card-header"><h2>Minha localização</h2>${icon('location')}</div><div class="location-status ${state.locationSharing ? '' : 'paused'}"><span class="status-dot"></span> ${state.locationSharing ? 'Compartilhamento desativado' : 'Não compartilhando'}</div><p>${hasLocation ? `Precisão aproximada: ${state.locationAccuracy || '—'} m.` : 'Nenhuma permissão de localização foi concedida neste aparelho.'}</p><div class="child-device-status"><span>${icon('battery')} Bateria <strong>${batteryLabel}</strong></span><span>${icon('navigation')} ${networkLabel}</span></div><button class="text-link" data-action="${hasLocation ? 'toggle-location' : 'request-location'}" type="button">${hasLocation ? (state.locationSharing ? 'Pausar compartilhamento' : 'Compartilhar localização') : 'Ativar localização'} ${icon(hasLocation && state.locationSharing ? 'pause' : 'locate')}</button></article><article class="panel child-route-card child-full-width"><div class="child-route-copy"><h2>Rotas compartilhadas</h2><p>${hasDevice ? 'Nenhuma rota recebida ainda.' : 'Conecte um responsável para receber uma rota.'}</p><div class="empty-route-inline">${icon('route')}<span>Aqui aparecerá somente uma rota realmente compartilhada.</span></div></div><button class="secondary-button" data-action="${hasDevice ? 'view-child-route' : 'go-connection'}" type="button">${icon(hasDevice ? 'map' : 'link')} ${hasDevice ? 'Ver rotas' : 'Conectar'}</button></article><article class="transparency-card"><span class="soft-chip">${icon('shieldCheck')} PROTEÇÃO VISÍVEL</span><h2>Privacidade primeiro</h2><p>Você pode revisar permissões, ver o estado do vínculo e pausar qualquer compartilhamento.</p><button class="secondary-button" data-nav="child-settings" type="button">${icon('settings')} Revisar permissões</button></article>${renderCalculatorCard()}</section></div>`;
 }
 function renderChildCalculatorPage() {
   return `<div class="dashboard child-dashboard"><section class="page-heading"><div><div class="eyebrow">FERRAMENTA DO DIA A DIA</div><h1>Calculadora</h1><p>Faça contas rápidas quando precisar.</p></div><button class="secondary-button" data-nav="child-home" type="button">${icon('arrowRight')} Voltar ao meu espaço</button></section><section style="max-width:430px">${renderCalculatorCard()}</section></div>`;
@@ -608,10 +626,13 @@ async function handleAuthSubmit() {
     if (household.ok) {
       state.householdId = household.householdId;
       await loadHouseholdState();
+      await syncDeviceStatus();
     } else state.authError = 'Conta autenticada, mas a família ainda não pôde ser criada. Verifique a migration do Supabase.';
   } else {
     await loadHouseholdState();
+    await syncDeviceStatus();
   }
+  subscribeRealtime();
   renderApp();
 }
 
@@ -623,11 +644,81 @@ async function loadHouseholdState() {
       listConnectedDevices(state.householdId),
     ]);
     if (pending.ok) state.pendingPairingRequests = pending.requests;
-    if (devices.ok) state.connectedDevices = devices.devices;
+    if (devices.ok) {
+      state.connectedDevices = devices.devices;
+      const ownDevice = devices.devices.find((device) => device.user_id === state.session?.user?.id);
+      if (ownDevice) {
+        state.currentDeviceId = ownDevice.id;
+        state.deviceStatus.batteryPercent = ownDevice.battery_percent ?? state.deviceStatus.batteryPercent;
+        state.deviceStatus.connectionType = ownDevice.connection_type || state.deviceStatus.connectionType;
+        state.deviceStatus.lastSeenAt = ownDevice.last_seen_at || state.deviceStatus.lastSeenAt;
+      }
+    }
     return;
   }
   const invites = await listMyEmailInvites();
   if (invites.ok) state.emailInvites = invites.invites;
+  if (state.householdId) {
+    const devices = await listConnectedDevices(state.householdId);
+    if (devices.ok) {
+      state.connectedDevices = devices.devices;
+      const ownDevice = devices.devices.find((device) => device.user_id === state.session?.user?.id);
+      if (ownDevice) {
+        state.currentDeviceId = ownDevice.id;
+        state.deviceStatus.batteryPercent = ownDevice.battery_percent ?? state.deviceStatus.batteryPercent;
+        state.deviceStatus.connectionType = ownDevice.connection_type || state.deviceStatus.connectionType;
+        state.deviceStatus.lastSeenAt = ownDevice.last_seen_at || state.deviceStatus.lastSeenAt;
+      }
+    }
+  }
+}
+
+async function syncDeviceStatus() {
+  if (!state.currentDeviceId || !supabaseConfigured || !supabase) return;
+  try {
+    const [battery, network] = await Promise.all([
+      Device.getBatteryInfo(),
+      Network.getStatus(),
+    ]);
+    const batteryPercent = typeof battery.batteryLevel === 'number'
+      ? Math.round(battery.batteryLevel * 100)
+      : null;
+    const connectionType = network.connectionType || 'unknown';
+    state.deviceStatus.batteryPercent = batteryPercent;
+    state.deviceStatus.connectionType = connectionType;
+    state.deviceStatus.lastSeenAt = new Date().toISOString();
+    await supabase
+      .from('devices')
+      .update({
+        battery_percent: batteryPercent,
+        connection_type: connectionType,
+        last_seen_at: state.deviceStatus.lastSeenAt,
+        last_status_at: state.deviceStatus.lastSeenAt,
+      })
+      .eq('id', state.currentDeviceId);
+  } catch {
+    // Status do dispositivo é complementar; a conexão continua funcionando sem ele.
+  }
+}
+
+async function refreshConnectionState() {
+  await loadHouseholdState();
+  renderApp();
+}
+
+function subscribeRealtime() {
+  if (!supabaseConfigured || !supabase || !state.session) return;
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+  realtimeChannel = supabase
+    .channel(`parentlock-sync-${state.session.user.id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pairing_requests' }, refreshConnectionState)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'email_invites' }, refreshConnectionState)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, refreshConnectionState)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'device_consents' }, refreshConnectionState)
+    .subscribe();
 }
 
 async function hydrateAuth() {
@@ -642,10 +733,13 @@ async function hydrateAuth() {
       if (household.ok) {
         state.householdId = household.householdId;
         await loadHouseholdState();
+        await syncDeviceStatus();
       }
     } else if (state.session) {
       await loadHouseholdState();
+      await syncDeviceStatus();
     }
+    subscribeRealtime();
   } catch {
     state.session = null;
   }
@@ -914,6 +1008,8 @@ async function handleClick(event) {
   if (action === 'accept-email-invite') {
     const inviteId = target.dataset.inviteId;
     if (!inviteId) return;
+    const invite = state.emailInvites.find((item) => item.id === inviteId);
+    if (invite?.household_id) state.householdId = invite.household_id;
     showToast('Aceitando convite…');
     const result = await acceptEmailInvite(inviteId);
     if (!result.ok) {
@@ -921,6 +1017,7 @@ async function handleClick(event) {
       return;
     }
     await loadHouseholdState();
+    await syncDeviceStatus();
     renderApp();
     showToast('Convite aceito. Revise as permissões do vínculo.');
     return;
@@ -936,6 +1033,7 @@ async function handleClick(event) {
       return;
     }
     await loadHouseholdState();
+    await syncDeviceStatus();
     renderApp();
     showToast('Vínculo aceito. Revise as permissões compartilhadas.');
     return;
@@ -943,6 +1041,7 @@ async function handleClick(event) {
 
   if (action === 'refresh-connections') {
     await loadHouseholdState();
+    await syncDeviceStatus();
     renderApp();
     return;
   }
@@ -984,7 +1083,9 @@ async function handleClick(event) {
       return;
     }
     state.connected = true;
-    state.connectedDevices = [result.data];
+    state.householdId = result.data?.household_id || state.householdId;
+    await loadHouseholdState();
+    await syncDeviceStatus();
     renderApp();
     showToast('Convite validado. Revise as permissões antes de continuar.');
     return;
