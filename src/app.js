@@ -71,13 +71,15 @@ const isDemoBuild = APP_MODE === 'demo';
 const NativeSettings = registerPlugin('Settings');
 const savedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem('parentlock-theme') : null;
 const onboardingKey = `parentlock-onboarding-${APP_MODE}`;
-const savedOnboarding = typeof localStorage !== 'undefined' ? localStorage.getItem(onboardingKey) === 'complete' : false;
+const savedOnboardingStatus = typeof localStorage !== 'undefined' ? localStorage.getItem(onboardingKey) : null;
+const savedOnboarding = savedOnboardingStatus === 'complete' || savedOnboardingStatus === 'skipped';
 
 const state = {
   mode: isCompanionBuild ? 'child' : 'admin',
   screen: isCompanionBuild ? 'child-home' : 'overview',
   theme: savedTheme === 'amoled' ? 'amoled' : 'light',
   onboardingComplete: savedOnboarding,
+  permissionsSkipped: savedOnboardingStatus === 'skipped',
   sheetExpanded: false,
   locationSharing: false,
   locationPermission: 'prompt',
@@ -280,6 +282,7 @@ function finishOnboarding() {
     return;
   }
   state.onboardingComplete = true;
+  state.permissionsSkipped = false;
   try {
     localStorage.setItem(onboardingKey, 'complete');
   } catch {
@@ -287,6 +290,19 @@ function finishOnboarding() {
   }
   state.screen = isCompanionBuild ? 'connection' : 'overview';
   renderApp();
+}
+
+function skipOnboarding() {
+  state.onboardingComplete = true;
+  state.permissionsSkipped = true;
+  try {
+    localStorage.setItem(onboardingKey, 'skipped');
+  } catch {
+    // A sessão continua funcionando sem persistência local.
+  }
+  state.screen = isCompanionBuild ? 'child-home' : 'overview';
+  renderApp();
+  showToast('Você entrou sem ativar tudo. Alguns recursos continuam bloqueados.', 'warning');
 }
 
 function permissionRow({ iconName, title, description, status, action, actionLabel }) {
@@ -298,7 +314,7 @@ function permissionRow({ iconName, title, description, status, action, actionLab
 function renderOnboarding() {
   const locationReady = state.locationPermission === 'granted';
   const notificationsReady = state.notificationPermission === 'granted';
-  return `<div class="onboarding-screen"><div class="onboarding-card"><div class="onboarding-brand"><span class="brand-mascot"><img src="/brand/parentlock-mascot.png" alt="Mascote ParentLock" /></span><div><strong>ParentLock</strong><small>${isCompanionBuild ? 'Aplicativo acompanhado' : 'Aplicativo administrador'}</small></div></div><div class="onboarding-eyebrow">PRIMEIRO ACESSO</div><h1>Vamos preparar seu aparelho.</h1><p class="onboarding-lead">Antes de entrar, revise e autorize apenas o que o aplicativo precisa para funcionar. Você poderá alterar tudo depois.</p><div class="permission-list">${permissionRow({ iconName: 'location', title: 'Localização', description: 'Usada somente quando você autorizar o compartilhamento ou pedir para ver sua posição no mapa.', status: state.locationPermission, action: 'request-location', actionLabel: locationReady ? 'Ativada' : 'Ativar' })}${permissionRow({ iconName: 'bell', title: 'Notificações', description: 'Necessárias para avisos de conexão, SOS e mudanças autorizadas.', status: state.notificationPermission, action: 'request-notifications', actionLabel: notificationsReady ? 'Ativadas' : 'Ativar' })}<div class="permission-row permission-row-info"><span class="permission-icon soft">${icon('mic')}</span><div class="permission-copy"><strong>Microfone</strong><p>Não é solicitado agora. Um check-in de áudio só poderá ser iniciado depois de um pedido visível e do seu aceite.</p></div><span class="permission-status soft">Não solicitado</span></div></div><div class="onboarding-note">${icon('shieldCheck')}<span>Você não precisa conceder acesso a contatos, fotos ou microfone para entrar. O vínculo com outro aparelho será uma etapa separada.</span></div><button class="primary-button onboarding-continue" data-action="finish-onboarding" type="button" ${permissionsReady() ? '' : 'disabled'}>${icon('arrowRight')} ${permissionsReady() ? 'Entrar no ParentLock' : 'Ative as permissões para continuar'}</button><button class="theme-toggle onboarding-theme" data-action="toggle-theme" type="button">${icon(state.theme === 'amoled' ? 'sun' : 'moon')} Tema ${state.theme === 'amoled' ? 'AMOLED' : 'claro'}</button></div></div>`;
+  return `<div class="onboarding-screen"><div class="onboarding-card"><div class="onboarding-brand"><span class="brand-mascot"><img src="/brand/parentlock-mascot.png" alt="Mascote ParentLock" /></span><div><strong>ParentLock</strong><small>${isCompanionBuild ? 'Aplicativo acompanhado' : 'Aplicativo administrador'}</small></div></div><div class="onboarding-eyebrow">PRIMEIRO ACESSO</div><h1>Vamos preparar seu aparelho.</h1><p class="onboarding-lead">Antes de entrar, revise e autorize apenas o que o aplicativo precisa para funcionar. Você poderá alterar tudo depois.</p><div class="permission-list">${permissionRow({ iconName: 'location', title: 'Localização', description: 'Usada somente quando você autorizar o compartilhamento ou pedir para ver sua posição no mapa.', status: state.locationPermission, action: 'request-location', actionLabel: locationReady ? 'Ativada' : 'Ativar' })}${permissionRow({ iconName: 'bell', title: 'Notificações', description: 'Necessárias para avisos de conexão, SOS e mudanças autorizadas.', status: state.notificationPermission, action: 'request-notifications', actionLabel: notificationsReady ? 'Ativadas' : 'Ativar' })}<div class="permission-row permission-row-info"><span class="permission-icon soft">${icon('mic')}</span><div class="permission-copy"><strong>Microfone</strong><p>Não é solicitado agora. Um check-in de áudio só poderá ser iniciado depois de um pedido visível e do seu aceite.</p></div><span class="permission-status soft">Não solicitado</span></div></div><div class="onboarding-note">${icon('shieldCheck')}<span>Você não precisa conceder acesso a contatos, fotos ou microfone para entrar. O vínculo com outro aparelho será uma etapa separada.</span></div><button class="primary-button onboarding-continue" data-action="finish-onboarding" type="button" ${permissionsReady() ? '' : 'disabled'}>${icon('arrowRight')} ${permissionsReady() ? 'Entrar no ParentLock' : 'Ative as permissões para continuar'}</button><button class="onboarding-skip" data-action="skip-onboarding" type="button">Continuar sem ativar agora</button><p class="onboarding-skip-note">Você poderá ativar depois em Privacidade. Mapa, alertas e SOS ficarão limitados enquanto as permissões estiverem pendentes.</p><button class="theme-toggle onboarding-theme" data-action="toggle-theme" type="button">${icon(state.theme === 'amoled' ? 'sun' : 'moon')} Tema ${state.theme === 'amoled' ? 'AMOLED' : 'claro'}</button></div></div>`;
 }
 
 function metricCard({ iconName, label, value, foot, trend, tone = '' }) {
@@ -311,7 +327,7 @@ function renderAdminOverview() {
   return `<div class="map-first-page ${state.sheetExpanded ? 'sheet-expanded' : ''}">
     <header class="map-first-toolbar">
       <div class="map-first-brand"><span class="brand-mark"><img src="/brand/parentlock-shield.svg" alt="" /></span><div><strong>ParentLock</strong><small>Mapa da família</small></div></div>
-      <div class="map-first-actions"><span class="neutral-chip">Nenhuma conexão</span><button class="theme-toggle map-theme-toggle" data-action="toggle-theme" type="button" aria-label="Alternar tema AMOLED">${icon(state.theme === 'amoled' ? 'sun' : 'moon')}<span>${state.theme === 'amoled' ? 'AMOLED' : 'Claro'}</span></button><button class="map-profile" data-action="profile-menu" type="button" aria-label="Abrir perfil">AD</button></div>
+      <div class="map-first-actions"><span class="${state.permissionsSkipped ? 'alert-chip' : 'neutral-chip'}">${state.permissionsSkipped ? 'Permissões pendentes' : 'Nenhuma conexão'}</span><button class="theme-toggle map-theme-toggle" data-action="toggle-theme" type="button" aria-label="Alternar tema AMOLED">${icon(state.theme === 'amoled' ? 'sun' : 'moon')}<span>${state.theme === 'amoled' ? 'AMOLED' : 'Claro'}</span></button><button class="map-profile" data-action="profile-menu" type="button" aria-label="Abrir perfil">AD</button></div>
     </header>
     <section class="map-first-stage">
       ${realMapMarkup()}
@@ -674,6 +690,11 @@ async function handleClick(event) {
 
   if (action === 'finish-onboarding') {
     finishOnboarding();
+    return;
+  }
+
+  if (action === 'skip-onboarding') {
+    skipOnboarding();
     return;
   }
 
