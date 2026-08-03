@@ -3825,6 +3825,74 @@ html[data-theme='amoled'] .real-map-canvas .leaflet-control-attribution {
   font-size: 10px;
 }
 
+.sheet-quick-title {
+  margin-top: 17px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.sheet-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sheet-quick-item {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  min-width: 0;
+  padding: 9px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  text-align: left;
+  transition: 150ms ease;
+}
+
+.sheet-quick-item:hover {
+  border-color: var(--mint);
+  transform: translateY(-1px);
+}
+
+.sheet-quick-item > span {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  margin-bottom: 7px;
+  place-items: center;
+  color: var(--mint-dark);
+  background: var(--mint-pale);
+  border-radius: 8px;
+}
+
+.sheet-quick-item > span .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.sheet-quick-item strong,
+.sheet-quick-item small {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-quick-item strong {
+  font-size: 9px;
+}
+
+.sheet-quick-item small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
 html[data-theme='amoled'] .main-content,
 html[data-theme='amoled'] .topbar,
 html[data-theme='amoled'] .dashboard {

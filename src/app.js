@@ -11,6 +11,7 @@ const iconPaths = {
   shield: '<path d="M12 3.4 19 6v5.1c0 4.3-2.8 7.6-7 9.5-4.2-1.9-7-5.2-7-9.5V6l7-2.6Z"/><path d="m8.7 12 2.1 2.1 4.5-4.6"/>',
   dashboard: '<rect x="4" y="4" width="6" height="6" rx="1.2"/><rect x="14" y="4" width="6" height="6" rx="1.2"/><rect x="4" y="14" width="6" height="6" rx="1.2"/><rect x="14" y="14" width="6" height="6" rx="1.2"/>',
   map: '<path d="m3.5 6.5 5.2-2 6.6 3 5.2-2v12l-5.2 2-6.6-3-5.2 2v-12Z"/><path d="M8.7 4.8v11.7M15.3 7.5v11.8"/>',
+  layers: '<path d="m12 3 9 4.8-9 4.8-9-4.8L12 3Z"/><path d="m4 12 8 4.3 8-4.3M4 16.2l8 4.3 8-4.3"/>',
   alert: '<path d="M10.3 4.7 3.8 16a1.5 1.5 0 0 0 1.3 2.2h13.8a1.5 1.5 0 0 0 1.3-2.2L13.7 4.7a2 2 0 0 0-3.4 0Z"/><path d="M12 9v3.4M12 15.6h.01"/>',
   link: '<path d="M10.4 13.6 9 15a3.5 3.5 0 0 1-5-5l2.3-2.3a3.5 3.5 0 0 1 5 0"/><path d="m13.6 10.4 1.4-1.4a3.5 3.5 0 0 1 5 5l-2.3 2.3a3.5 3.5 0 0 1-5 0"/><path d="m8.8 12.2 6.4-4.4"/>',
   audio: '<path d="M4 9.2v5.6M8 6.5v11M12 4v16M16 6.5v11M20 9.2v5.6"/>',
@@ -78,6 +79,7 @@ const state = {
   mode: isCompanionBuild ? 'child' : 'admin',
   screen: isCompanionBuild ? 'child-home' : 'overview',
   theme: savedTheme === 'amoled' ? 'amoled' : 'light',
+  mapLayer: 'street',
   onboardingComplete: savedOnboarding,
   permissionsSkipped: savedOnboardingStatus === 'skipped',
   sheetExpanded: false,
@@ -109,6 +111,7 @@ const state = {
 };
 
 let activeMap = null;
+let activeBaseLayer = null;
 let activeRouteBounds = null;
 let sheetPointerStart = null;
 
@@ -333,7 +336,7 @@ function renderAdminOverview() {
       ${realMapMarkup()}
       <div class="map-place-pill">${icon('map')} Mapa geral</div>
       <div class="map-live-card"><span class="map-empty-icon">${icon(hasLocation ? 'location' : 'locate')}</span><div><strong>Seu aparelho</strong><span class="${hasLocation ? 'location-ready' : ''}">${icon(hasLocation ? 'checkCircle' : 'info')} ${locationStatus}</span></div><button data-action="${hasLocation ? 'open-pairing' : 'request-location'}" type="button" aria-label="${hasLocation ? 'Conectar aparelho' : 'Ativar localização'}">${icon(hasLocation ? 'plus' : 'locate')}</button></div>
-      <div class="map-action-stack"><button class="map-control" data-action="zoom-in" type="button" aria-label="Aumentar zoom">${icon('zoomIn')}</button><button class="map-control" data-action="zoom-out" type="button" aria-label="Diminuir zoom">${icon('zoomOut')}</button><button class="map-control" data-action="center-map" type="button" aria-label="Centralizar mapa">${icon('locate')}</button></div>
+      <div class="map-action-stack"><button class="map-control" data-action="toggle-map-layer" type="button" aria-label="Alternar camada do mapa">${icon('layers')}</button><button class="map-control" data-action="zoom-in" type="button" aria-label="Aumentar zoom">${icon('zoomIn')}</button><button class="map-control" data-action="zoom-out" type="button" aria-label="Diminuir zoom">${icon('zoomOut')}</button><button class="map-control" data-action="center-map" type="button" aria-label="Centralizar mapa">${icon('locate')}</button></div>
     </section>
     <nav class="map-floating-nav" aria-label="Navegação do mapa">
       <button class="map-nav-item active" data-nav="overview" type="button">${icon('map')}<span>Mapa</span></button>
@@ -350,6 +353,8 @@ function renderAdminOverview() {
         <article class="sheet-route-card"><div class="sheet-route-icon">${icon('route')}</div><div class="sheet-route-copy"><strong>Nenhuma rota compartilhada</strong><span>As rotas aparecerão somente depois que um aparelho for conectado.</span></div></article>
         <div class="sheet-stat-grid"><div class="sheet-stat"><span class="sheet-stat-icon mint">${icon('location')}</span><div><strong>0</strong><small>localizações compartilhadas</small></div></div><div class="sheet-stat"><span class="sheet-stat-icon coral">${icon('alert')}</span><div><strong>0</strong><small>alertas pendentes</small></div></div></div>
         <div class="sheet-actions"><button class="secondary-button" data-action="request-location" type="button">${icon('locate')} ${hasLocation ? 'Atualizar localização' : 'Ativar localização'}</button><button class="secondary-button" data-nav="settings" type="button">${icon('shieldCheck')} Privacidade</button></div>
+        <div class="sheet-quick-title">Atalhos</div>
+        <div class="sheet-quick-grid"><button class="sheet-quick-item" data-nav="connection" type="button"><span>${icon('link')}</span><strong>Conexão</strong><small>Vincular aparelho</small></button><button class="sheet-quick-item" data-nav="map" type="button"><span>${icon('route')}</span><strong>Rotas</strong><small>Ver caminhos</small></button><button class="sheet-quick-item" data-nav="alerts" type="button"><span>${icon('alert')}</span><strong>Alertas</strong><small>Central de segurança</small></button><button class="sheet-quick-item" data-nav="settings" type="button"><span>${icon('settings')}</span><strong>Privacidade</strong><small>Revisar permissões</small></button></div>
       </div>
     </section>
   </div>`;
@@ -432,6 +437,7 @@ function destroyRealMap() {
   if (activeMap) {
     activeMap.remove();
     activeMap = null;
+    activeBaseLayer = null;
     activeRouteBounds = null;
   }
 }
@@ -444,10 +450,16 @@ function setupRealMap() {
     attributionControl: true,
     preferCanvas: true,
   }).setView([0, 0], 2);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap',
-  }).addTo(map);
+  const tileLayer = state.mapLayer === 'satellite'
+    ? L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri',
+    })
+    : L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap',
+    });
+  activeBaseLayer = tileLayer.addTo(map);
   activeMap = map;
   activeRouteBounds = null;
 
@@ -885,6 +897,13 @@ async function handleClick(event) {
   if (action === 'calc-key') {
     calculatorPress(target.dataset.key || '');
     renderApp();
+    return;
+  }
+
+  if (action === 'toggle-map-layer') {
+    state.mapLayer = state.mapLayer === 'street' ? 'satellite' : 'street';
+    renderApp();
+    showToast(state.mapLayer === 'satellite' ? 'Camada de satélite ativada.' : 'Mapa de ruas ativado.');
     return;
   }
 
