@@ -8,6 +8,13 @@ export function normalizePairingCode(value) {
     .slice(0, 24);
 }
 
+export async function ensureHousehold() {
+  if (!supabaseConfigured || !supabase) return { ok: false, reason: 'backend-not-configured' };
+  const { data, error } = await supabase.rpc('get_or_create_household');
+  if (error) return { ok: false, reason: 'request-failed', error };
+  return { ok: true, householdId: data };
+}
+
 export async function createPairingCode(householdId) {
   if (!supabaseConfigured || !supabase) return { ok: false, reason: 'backend-not-configured' };
   if (!householdId) return { ok: false, reason: 'household-required' };

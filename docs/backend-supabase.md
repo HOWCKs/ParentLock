@@ -29,4 +29,4 @@ cp .env.example .env.local
 npm run dev
 ```
 
-A autenticação do administrador ainda está deliberadamente reservada para a próxima etapa, conforme o plano atual. Enquanto não houver URL e anon key configuradas, a tela de conexão informa que nenhum vínculo foi criado, em vez de simular sucesso.
+A tela de autenticação por e-mail e senha já está preparada. No Supabase, habilite o provedor Email antes de testar. Enquanto não houver URL e anon key configuradas, a tela de conexão informa que nenhum vínculo foi criado, em vez de simular sucesso.

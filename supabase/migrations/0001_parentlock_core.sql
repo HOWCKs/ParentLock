@@ -139,6 +139,43 @@ as $$
   );
 $$;
 
+create or replace function public.get_or_create_household()
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  existing_household uuid;
+  new_household uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'authentication_required';
+  end if;
+
+  select household_id into existing_household
+  from public.household_members
+  where user_id = auth.uid()
+    and role = 'admin'
+    and status = 'active'
+  order by created_at
+  limit 1;
+
+  if existing_household is not null then
+    return existing_household;
+  end if;
+
+  insert into public.households (created_by)
+  values (auth.uid())
+  returning id into new_household;
+
+  insert into public.household_members (household_id, user_id, role, status)
+  values (new_household, auth.uid(), 'admin', 'active');
+
+  return new_household;
+end;
+$$;
+
 create or replace function public.create_pairing_code(target_household uuid)
 returns text
 language plpgsql

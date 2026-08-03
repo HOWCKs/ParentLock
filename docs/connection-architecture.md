@@ -32,4 +32,4 @@ Localização em segundo plano, bateria e passos exigem permissões Android pró
 
 ## Estado atual
 
-A migration Supabase e a tela de conexão já estão preparadas. A geração real depende da próxima etapa: criar a conta do administrador e configurar autenticação. Sem essas variáveis, o app não simula convite ou vínculo.
+A migration Supabase, a tela de conexão e a tela de autenticação já estão preparadas. A geração real depende de criar o projeto Supabase, habilitar o provedor de e-mail e preencher as variáveis do aplicativo. Sem essas configurações, o app não simula convite ou vínculo.

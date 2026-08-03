@@ -2,8 +2,9 @@ import L from 'leaflet';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { createPairingCode, redeemPairingCode, normalizePairingCode } from './services/pairing';
-import { supabaseConfigured } from './services/supabase';
+import { createPairingCode, ensureHousehold, redeemPairingCode, normalizePairingCode } from './services/pairing';
+import { getCurrentSession, signInWithPassword, signUpWithPassword } from './services/auth';
+import { supabaseConfigured, supabase } from './services/supabase';
 import 'leaflet/dist/leaflet.css';
 import './styles.css';
 
@@ -92,6 +93,10 @@ const state = {
   connected: false,
   connectedDevices: [],
   householdId: '',
+  session: null,
+  authChecked: false,
+  authMode: 'sign-in',
+  authBusy: false,
   pairingCode: '',
   pairingCodeExpiresAt: null,
   settings: {
@@ -544,12 +549,81 @@ function setupSheetGestures() {
   });
 }
 
+function renderAuthPage() {
+  const signUp = state.authMode === 'sign-up';
+  return `<div class="auth-screen"><div class="auth-card"><div class="auth-brand"><span class="brand-mascot"><img src="/brand/parentlock-mascot.png" alt="Mascote ParentLock" /></span><div><strong>ParentLock</strong><small>${isCompanionBuild ? 'Aplicativo acompanhado' : 'Aplicativo administrador'}</small></div></div><div class="onboarding-eyebrow">CONTA PROTEGIDA</div><h1>${signUp ? 'Criar sua conta' : 'Entrar no ParentLock'}</h1><p class="auth-lead">${signUp ? 'A conta identifica o participante antes de qualquer vínculo ou compartilhamento.' : 'Entre para continuar e gerenciar somente os vínculos autorizados.'}</p><form class="auth-form" data-action="auth-submit"><label for="auth-email">E-mail</label><input id="auth-email" class="text-input auth-input" type="email" placeholder="voce@exemplo.com" autocomplete="email" required /><label for="auth-password">Senha</label><input id="auth-password" class="text-input auth-input" type="password" placeholder="Mínimo de 6 caracteres" autocomplete="${signUp ? 'new-password' : 'current-password'}" required />${state.authError ? `<div class="auth-error">${icon('alert')}<span>${state.authError}</span></div>` : ''}<button class="primary-button auth-submit" type="submit" ${state.authBusy ? 'disabled' : ''}>${icon(state.authBusy ? 'clock' : 'arrowRight')} ${state.authBusy ? 'Aguarde…' : signUp ? 'Criar conta' : 'Entrar'}</button></form><button class="auth-switch" data-action="toggle-auth-mode" type="button">${signUp ? 'Já tenho uma conta' : 'Criar uma conta nova'}</button><div class="auth-note">${icon('shieldCheck')}<span>A autenticação é necessária antes de criar ou aceitar um vínculo. Nenhum dado será compartilhado sem consentimento.</span></div><button class="theme-toggle onboarding-theme" data-action="toggle-theme" type="button">${icon(state.theme === 'amoled' ? 'sun' : 'moon')} Tema ${state.theme === 'amoled' ? 'AMOLED' : 'claro'}</button></div></div>`;
+}
+
+function authMessage(error) {
+  const message = String(error?.message || error || '');
+  if (message.includes('Invalid login')) return 'E-mail ou senha incorretos.';
+  if (message.includes('already registered')) return 'Este e-mail já está cadastrado.';
+  if (message.includes('Password')) return 'A senha precisa ter pelo menos 6 caracteres.';
+  return 'Não foi possível concluir a autenticação. Verifique o serviço e tente novamente.';
+}
+
+async function handleAuthSubmit() {
+  const email = document.querySelector('#auth-email')?.value.trim();
+  const password = document.querySelector('#auth-password')?.value;
+  if (!email || !password) {
+    state.authError = 'Preencha e-mail e senha para continuar.';
+    renderApp();
+    return;
+  }
+  state.authBusy = true;
+  state.authError = '';
+  renderApp();
+  const result = state.authMode === 'sign-up'
+    ? await signUpWithPassword(email, password)
+    : await signInWithPassword(email, password);
+  state.authBusy = false;
+  if (result.error) {
+    state.authError = authMessage(result.error);
+    renderApp();
+    return;
+  }
+  if (!result.data?.session) {
+    state.authError = 'Conta criada. Confirme o e-mail antes de entrar.';
+    renderApp();
+    return;
+  }
+  state.session = result.data.session;
+  if (state.mode === 'admin') {
+    const household = await ensureHousehold();
+    if (household.ok) state.householdId = household.householdId;
+    else state.authError = 'Conta autenticada, mas a família ainda não pôde ser criada. Verifique a migration do Supabase.';
+  }
+  renderApp();
+}
+
+async function hydrateAuth() {
+  if (!supabaseConfigured || !supabase) {
+    state.authChecked = true;
+    return;
+  }
+  try {
+    state.session = await getCurrentSession();
+    if (state.session && state.mode === 'admin') {
+      const household = await ensureHousehold();
+      if (household.ok) state.householdId = household.householdId;
+    }
+  } catch {
+    state.session = null;
+  }
+  state.authChecked = true;
+  renderApp();
+}
+
 function renderApp() {
   destroyRealMap();
   document.documentElement.dataset.theme = state.theme;
   const app = document.querySelector('#app');
   if (!state.onboardingComplete) {
     app.innerHTML = renderOnboarding();
+    return;
+  }
+  if (supabaseConfigured && !state.session) {
+    app.innerHTML = renderAuthPage();
     return;
   }
   const immersiveMap = state.mode === 'admin' && state.screen === 'overview';
@@ -709,6 +783,18 @@ async function handleClick(event) {
 
   if (action === 'finish-onboarding') {
     finishOnboarding();
+    return;
+  }
+
+  if (action === 'auth-submit') {
+    handleAuthSubmit();
+    return;
+  }
+
+  if (action === 'toggle-auth-mode') {
+    state.authMode = state.authMode === 'sign-in' ? 'sign-up' : 'sign-in';
+    state.authError = '';
+    renderApp();
     return;
   }
 
@@ -999,10 +1085,19 @@ function handleKeydown(event) {
   if (event.key === 'Escape') closeModal();
 }
 
+function handleSubmit(event) {
+  const form = event.target.closest('form[data-action="auth-submit"]');
+  if (!form) return;
+  event.preventDefault();
+  handleAuthSubmit();
+}
+
 document.addEventListener('click', handleClick);
+document.addEventListener('submit', handleSubmit);
 document.addEventListener('keydown', handleKeydown);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) refreshNativePermissions();
 });
 renderApp();
 refreshNativePermissions();
+hydrateAuth();
