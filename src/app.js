@@ -744,7 +744,7 @@ function calculatorPress(key) {
 }
 
 async function handleClick(event) {
-  const target = event.target.closest('button, [data-action], [data-nav], [data-mode]');
+  const target = event.target.closest('button, [data-nav], [data-mode], [data-action]:not(form)');
   if (!target) return;
 
   if (target.dataset.mode) {
