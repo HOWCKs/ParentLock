@@ -39,4 +39,11 @@ cp .env.example .env.local
 npm run dev
 ```
 
+Para os APKs compilados pelo GitHub Actions, cadastre os mesmos valores como secrets do repositório:
+
+```text
+VITE_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY
+```
+
 A tela de autenticação por e-mail e senha já está preparada. No Supabase, habilite o provedor Email antes de testar. Enquanto não houver URL e anon key configuradas, a tela de conexão informa que nenhum vínculo foi criado, em vez de simular sucesso.
