@@ -1,8 +1,18 @@
 # Backend Supabase
 
-A base do vínculo real fica em `supabase/migrations/0001_parentlock_core.sql`.
+A base do vínculo real está dividida em três migrations na pasta `supabase/migrations/`, para facilitar a execução pelo SQL Editor:
 
-## O que a migration prepara
+Execute nesta ordem:
+
+```text
+0001_extensions_and_tables.sql
+0002_pairing_functions.sql
+0003_rls_and_realtime.sql
+```
+
+Cada arquivo é independente para colar no SQL Editor. Não pule a ordem.
+
+## O que as migrations preparam
 
 - famílias e participantes;
 - aparelhos por participante;
