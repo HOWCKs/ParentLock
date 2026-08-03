@@ -100,4 +100,4 @@ bash scripts/termux-apk.sh admin
 bash scripts/termux-apk.sh companion
 ```
 
-A próxima etapa é conectar autenticação, backend, permissões nativas explícitas, sincronização de participantes e o serviço de alertas.
+A próxima etapa é conectar autenticação, backend, permissões nativas explícitas, sincronização de participantes e o serviço de alertas. A base do modelo Supabase está documentada em `docs/backend-supabase.md`; sem as variáveis do projeto, a tela de conexão não simula vínculos.
