@@ -3122,6 +3122,151 @@ h3 {
   background: transparent;
 }
 
+.usage-hero {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 22px;
+}
+
+.usage-hero-icon,
+.usage-empty-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--mint-dark);
+  background: var(--mint-pale);
+  border-radius: 14px;
+}
+
+.usage-hero-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.usage-hero-icon .icon,
+.usage-empty-icon .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.usage-hero h2 {
+  font-size: 17px;
+}
+
+.usage-hero p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.usage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.usage-empty-card {
+  padding: 22px;
+}
+
+.usage-empty-icon {
+  width: 39px;
+  height: 39px;
+  border-radius: 11px;
+}
+
+.usage-empty-card h2 {
+  margin-top: 14px;
+  font-size: 16px;
+}
+
+.usage-empty-card p {
+  min-height: 34px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.usage-empty-card .secondary-button {
+  margin-top: 14px;
+}
+
+.usage-empty-card .neutral-chip {
+  margin-top: 10px;
+}
+
+.usage-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 13px;
+  margin-top: 18px;
+  color: var(--muted);
+  background: var(--blue-pale);
+  border-radius: 11px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.usage-callout .icon {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  color: var(--blue);
+}
+
+.controls-empty {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 38px 24px;
+  text-align: center;
+}
+
+.controls-empty h2 {
+  margin-top: 14px;
+  font-size: 20px;
+}
+
+.controls-empty > p {
+  max-width: 460px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.controls-examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 21px;
+}
+
+.controls-examples span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  color: var(--muted);
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.controls-examples .icon {
+  width: 13px;
+  height: 13px;
+  color: var(--mint-dark);
+}
+
 .auth-screen {
   display: grid;
   min-height: 100vh;
@@ -4609,7 +4754,8 @@ html[data-theme='amoled'] .sheet-stat {
     width: 100%;
   }
 
-  .alert-overview {
+  .alert-overview,
+  .usage-grid {
     grid-template-columns: 1fr;
   }
 

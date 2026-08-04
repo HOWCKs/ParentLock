@@ -413,6 +413,16 @@ function renderConnectionPage() {
     : `<div class="email-invite-form"><label class="connection-form-label" for="invite-email-input">Convidar pelo e-mail da conta</label><div class="input-wrap">${icon('mail')}<input id="invite-email-input" class="text-input" type="email" placeholder="e-mail do Companion" autocomplete="off" /></div><p class="form-help">O endereço é usado apenas para localizar a conta autenticada. A outra pessoa ainda precisará aceitar.</p><button class="secondary-button" data-action="create-email-invite" type="button" ${canGenerate ? '' : 'disabled'}>${icon('send')} Enviar convite por e-mail</button></div>`;
   return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">VÍNCULO COM ACEITE</div><h1>${child ? 'Conectar responsável' : 'Conectar aparelho'}</h1><p>${child ? 'Quando receber um convite, digite o código aqui.' : 'O administrador cria o código; o outro aparelho entra com aceite explícito.'}</p></div><span class="${supabaseConfigured ? 'live-chip' : 'neutral-chip'}">${icon(supabaseConfigured ? 'checkCircle' : 'lock')} ${serviceLabel}</span></section><section class="connection-layout"><article class="panel connection-card"><div class="stepper"><div class="step active"><span class="step-number">1</span><span>${child ? 'Receba o código' : 'Gere o convite'}</span></div><div class="step"><span class="step-number">2</span><span>${child ? 'Revise o pedido' : 'Aguarde o aceite'}</span></div><div class="step"><span class="step-number">3</span><span>Escolha o que compartilhar</span></div></div>${child ? `${emailInviteBlock}<label class="connection-form-label" for="pair-code-input">Código recebido</label><div class="input-wrap">${icon('key')}<input id="pair-code-input" class="text-input" maxlength="24" placeholder="Digite o código do convite" autocomplete="off" /></div><p class="form-help">O código será validado pelo serviço de conexão. Nenhum aparelho é vinculado somente por digitar um texto.</p><div class="form-actions"><button class="secondary-button" data-nav="child-settings" type="button">${icon('shieldCheck')} Privacidade</button><button class="primary-button" data-action="connect-code" type="button">${icon('link')} Validar convite</button></div>` : `${emailInviteBlock}${codeBlock}<div class="form-actions"><button class="primary-button" data-action="create-pairing-code" type="button" ${canGenerate ? '' : 'disabled'}>${icon('key')} ${state.pairingCode ? 'Gerar novo código' : 'Gerar código de convite'}</button><button class="secondary-button" data-action="connection-info" type="button">${icon('info')} Como funciona</button></div>`}<div class="consent-note">${icon('shieldCheck')}<span>Nada começa escondido: cada participante verá quais dados serão compartilhados, poderá aceitar ou recusar e poderá pausar o vínculo depois.</span></div></article><article class="panel connected-devices"><div class="panel-header"><div class="panel-title-wrap"><h2>Participantes vinculados</h2><p>${state.pendingPairingRequests.length ? 'Solicitações aguardando sua revisão.' : 'Estado real dos aparelhos autorizados.'}</p></div><span class="${state.connectedDevices.length ? 'live-chip' : 'neutral-chip'}">${state.connectedDevices.length} ativos</span></div>${renderParticipantsPanel(child)}</article></section></div>`;
 }
+function renderUsagePage() {
+  const hasDevice = state.connectedDevices.length > 0;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">TRANSPARÊNCIA DIGITAL</div><h1>Uso de aplicativos</h1><p>Veja somente o tempo de uso autorizado pelo Companion.</p></div><span class="neutral-chip">${hasDevice ? 'Aguardando permissão' : 'Sem vínculo'}</span></section><section class="usage-hero panel"><div class="usage-hero-icon">${icon('smartphone')}</div><div><h2>${hasDevice ? 'O acesso ainda não foi autorizado' : 'Conecte um Companion primeiro'}</h2><p>${hasDevice ? 'No aparelho acompanhado, o responsável deverá ver esta permissão e autorizá-la nas configurações do Android.' : 'Depois do vínculo, esta área mostrará apenas os aplicativos e tempos compartilhados.'}</p></div></section><section class="usage-grid"><article class="panel usage-empty-card"><div class="usage-empty-icon">${icon('clock')}</div><h2>Tempo de uso</h2><p>Nenhum dado de uso foi recebido.</p><span class="neutral-chip">sem dados</span></article><article class="panel usage-empty-card"><div class="usage-empty-icon">${icon('users')}</div><h2>Atividade compartilhada</h2><p>O Companion escolherá o que compartilhar. Nada será coletado sem a permissão de Acesso ao uso.</p><button class="secondary-button" data-nav="settings" type="button">${icon('shieldCheck')} Ver privacidade</button></article></section><div class="usage-callout">${icon('info')}<span>O Android exige uma permissão especial de “Acesso ao uso”. Ela será apresentada de forma visível no Companion e poderá ser revogada a qualquer momento.</span></div></div>`;
+}
+
+function renderControlsPage() {
+  const hasDevice = state.connectedDevices.length > 0;
+  return `<div class="dashboard"><section class="page-heading"><div><div class="eyebrow">ROTINAS DA FAMÍLIA</div><h1>Regras de uso</h1><p>Crie limites claros em conjunto, sem bloquear nada escondido.</p></div><button class="primary-button" data-action="create-usage-rule" type="button" ${hasDevice ? '' : 'disabled'}>${icon('plus')} Criar regra</button></section><section class="controls-empty panel"><span class="empty-state-icon">${icon('lock')}</span><h2>Nenhuma regra criada</h2><p>${hasDevice ? 'As regras aparecerão aqui depois que o uso de aplicativos for autorizado pelo Companion.' : 'Conecte um Companion para configurar limites de horário ou bloqueios aceitos pela família.'}</p><div class="controls-examples"><span>${icon('clock')} Limite diário</span><span>${icon('moon')} Horário de pausa</span><span>${icon('shieldCheck')} Aviso visível</span></div></section><div class="usage-callout">${icon('info')}<span>Bloqueios Android usam permissões especiais e devem sempre ser visíveis no aparelho acompanhado. O Admin não terá acesso ao conteúdo de mensagens ou à tela.</span></div></div>`;
+}
+
 function renderAudioPage() {
   const hasDevice = state.connectedDevices.length > 0;
   const requestStatus = state.audioRequest ? 'Pedido aguardando aceite' : hasDevice ? 'Nenhum pedido em aberto' : 'Nenhum aparelho conectado';
@@ -473,6 +483,8 @@ function renderCurrentScreen() {
   if (state.screen === 'map') return renderMapPage();
   if (state.screen === 'alerts') return renderAlertsPage();
   if (state.screen === 'connection') return renderConnectionPage();
+  if (state.screen === 'usage') return renderUsagePage();
+  if (state.screen === 'controls') return renderControlsPage();
   if (state.screen === 'audio') return renderAudioPage();
   if (state.screen === 'settings') return renderSettingsPage();
   return renderAdminOverview();
@@ -1088,6 +1100,16 @@ async function handleClick(event) {
     await syncDeviceStatus();
     renderApp();
     showToast('Convite validado. Revise as permissões antes de continuar.');
+    return;
+  }
+
+  if (action === 'create-usage-rule') {
+    openModal({
+      title: 'Criar regra de uso',
+      description: 'Limites visíveis e combinados com o Companion.',
+      body: `<div class="modal-summary">${icon('lock')}<span>A regra só poderá ser aplicada depois que o Companion conceder Acesso ao uso. O aparelho acompanhado verá a regra, seu horário e como pausá-la.</span></div><div class="consent-note">${icon('info')}<span>Esta primeira versão prepara o fluxo; nenhum aplicativo será bloqueado sem que a permissão Android esteja ativa.</span></div>`,
+      actions: `<button class="primary-button" data-action="close-modal" type="button">Entendi</button>`,
+    });
     return;
   }
 

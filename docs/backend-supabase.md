@@ -12,6 +12,7 @@ Execute nesta ordem:
 0005_email_invites.sql
 0006_fix_pgcrypto_schema.sql
 0007_device_status.sql
+0008_usage_and_rules.sql
 ```
 
 Cada arquivo é independente para colar no SQL Editor. Não pule a ordem.
